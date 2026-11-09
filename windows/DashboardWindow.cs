@@ -53,6 +53,8 @@ public sealed class DashboardWindow : Window
         {
             Mode.Maintain => L10n.Tr("유지 모드"),
             Mode.Departure => L10n.Tr("퇴근 충전"),
+            Mode.Commute => L10n.Tr("출근 충전"),
+            Mode.OneShot => L10n.Tr("지금 충전"),
             Mode.Unavailable => L10n.Tr("지원 안 됨 (모니터링만)"),
             _ => L10n.Tr("일반 충전"),
         };
@@ -100,6 +102,7 @@ public sealed class DashboardWindow : Window
         }
         var S = AppSettings.Shared;
         if (S.MaintainEnabled) Rule(E.Controller.Kind == ControlKind.Conservation ? E.Controller.FixedLevel : S.MaintainLevel, Theme.Blue, L10n.Tr("유지 %@%", S.MaintainLevel));
+        if (S.CommuteEnabled && (!S.DepartureEnabled || S.CommuteTarget != S.DepartureTarget)) Rule(S.CommuteTarget, Theme.Teal, L10n.Tr("출근 충전 · 목표 %@%", S.CommuteTarget));
         if (S.DepartureEnabled) Rule(S.DepartureTarget, Theme.Orange, L10n.Tr("퇴근 목표 %@%", S.DepartureTarget));
 
         // 시간 축 라벨 (시작, 중간, 끝)

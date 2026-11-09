@@ -1,4 +1,4 @@
-// 충전 유지(세일링) + 퇴근 충전 스케줄 + 기록
+// 충전 유지(세일링) + 일정 충전(출근·퇴근) + 지금 충전(출장) + 기록
 
 import Cocoa
 import Combine
@@ -23,6 +23,17 @@ final class Settings: ObservableObject {
     @Published var departureLead: Int { didSet { d.set(departureLead, forKey: "departureLead") } }         // 몇 분 전부터 충전
     @Published var departureWeekdays: Set<Int> { didSet { d.set(Array(departureWeekdays), forKey: "departureWeekdays") } } // Calendar weekday (1=일 … 7=토)
 
+    /// 출근 충전: 출근 시각 전에 목표까지 (집에서 밤새 전원 연결해 둘 때)
+    @Published var commuteEnabled: Bool { didSet { d.set(commuteEnabled, forKey: "commuteEnabled") } }
+    @Published var commuteMinutes: Int { didSet { d.set(commuteMinutes, forKey: "commuteMinutes") } }
+    @Published var commuteTarget: Int { didSet { d.set(commuteTarget, forKey: "commuteTarget") } }
+    @Published var commuteLead: Int { didSet { d.set(commuteLead, forKey: "commuteLead") } }
+    @Published var commuteWeekdays: Set<Int> { didSet { d.set(Array(commuteWeekdays), forKey: "commuteWeekdays") } }
+
+    /// 지금 충전 (출장·외출): 0 이면 꺼짐. 목표 도달 후 어댑터를 뽑거나 24시간이 지나면 해제
+    @Published var oneShotTarget: Int { didSet { d.set(oneShotTarget, forKey: "oneShotTarget") } }
+    @Published var oneShotSince: Double { didSet { d.set(oneShotSince, forKey: "oneShotSince") } }
+
     /// 자동 업무 모드 (AppDelegate 와 공유)
     @Published var autoMode: Bool { didSet { d.set(autoMode, forKey: "autoMode") } }
     /// 표시 언어: "system" | "ko" | "en" | "ja" | "zh-Hans"
@@ -36,7 +47,9 @@ final class Settings: ObservableObject {
         d.register(defaults: [
             "maintainEnabled": false, "maintainLevel": 60, "maintainOnlyClamshell": false,
             "departureEnabled": false, "departureMinutes": 18 * 60, "departureTarget": 100,
-            "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6], "autoMode": false, "hidWake": true, "language": "system",
+            "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6],
+            "commuteEnabled": false, "commuteMinutes": 8 * 60, "commuteTarget": 80, "commuteLead": 90,
+            "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "autoMode": false, "hidWake": true, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -46,12 +59,71 @@ final class Settings: ObservableObject {
         departureTarget = d.integer(forKey: "departureTarget")
         departureLead = d.integer(forKey: "departureLead")
         departureWeekdays = Set((d.array(forKey: "departureWeekdays") as? [Int]) ?? [2, 3, 4, 5, 6])
+        commuteEnabled = d.bool(forKey: "commuteEnabled")
+        commuteMinutes = d.integer(forKey: "commuteMinutes")
+        commuteTarget = d.integer(forKey: "commuteTarget")
+        commuteLead = d.integer(forKey: "commuteLead")
+        commuteWeekdays = Set((d.array(forKey: "commuteWeekdays") as? [Int]) ?? [2, 3, 4, 5, 6])
+        oneShotTarget = d.integer(forKey: "oneShotTarget")
+        oneShotSince = d.double(forKey: "oneShotSince")
         autoMode = d.bool(forKey: "autoMode")
         hidWake = d.bool(forKey: "hidWake")
         language = d.string(forKey: "language") ?? "system"
     }
 
     var departureTimeText: String { String(format: "%02d:%02d", departureMinutes / 60, departureMinutes % 60) }
+    var commuteTimeText: String { String(format: "%02d:%02d", commuteMinutes / 60, commuteMinutes % 60) }
+
+    /// 일정 하나의 값을 화면에서 같은 코드로 다루기 위한 묶음
+    func schedule(_ k: ScheduleKind) -> ScheduleValues {
+        switch k {
+        case .commute: return ScheduleValues(enabled: commuteEnabled, minutes: commuteMinutes, target: commuteTarget, lead: commuteLead, weekdays: commuteWeekdays)
+        case .leave: return ScheduleValues(enabled: departureEnabled, minutes: departureMinutes, target: departureTarget, lead: departureLead, weekdays: departureWeekdays)
+        }
+    }
+
+    func update(_ k: ScheduleKind, _ change: (inout ScheduleValues) -> Void) {
+        var v = schedule(k)
+        change(&v)
+        switch k {
+        case .commute:
+            if commuteEnabled != v.enabled { commuteEnabled = v.enabled }
+            if commuteMinutes != v.minutes { commuteMinutes = v.minutes }
+            if commuteTarget != v.target { commuteTarget = v.target }
+            if commuteLead != v.lead { commuteLead = v.lead }
+            if commuteWeekdays != v.weekdays { commuteWeekdays = v.weekdays }
+        case .leave:
+            if departureEnabled != v.enabled { departureEnabled = v.enabled }
+            if departureMinutes != v.minutes { departureMinutes = v.minutes }
+            if departureTarget != v.target { departureTarget = v.target }
+            if departureLead != v.lead { departureLead = v.lead }
+            if departureWeekdays != v.weekdays { departureWeekdays = v.weekdays }
+        }
+    }
+
+    func startOneShot(_ target: Int) {
+        oneShotSince = Date().timeIntervalSince1970
+        oneShotTarget = target
+    }
+
+    func cancelOneShot() { oneShotTarget = 0 }
+}
+
+enum ScheduleKind: String, CaseIterable, Identifiable {
+    case commute, leave
+    var id: String { rawValue }
+    /// 이름 (번역 키)
+    var title: String { self == .commute ? tr("출근 충전") : tr("퇴근 충전") }
+    var shortTitle: String { self == .commute ? tr("출근") : tr("퇴근") }
+}
+
+struct ScheduleValues: Equatable {
+    var enabled: Bool
+    var minutes: Int        // 자정 기준 분
+    var target: Int
+    var lead: Int           // 몇 분 전부터 충전
+    var weekdays: Set<Int>  // Calendar weekday (1=일 … 7=토)
+    var timeText: String { String(format: "%02d:%02d", minutes / 60, minutes % 60) }
 }
 
 // MARK: - 기록
@@ -111,6 +183,8 @@ enum ChargeMode: String {
     case battery = "배터리 사용 중"
     case maintain = "유지 모드"
     case departure = "퇴근 충전"
+    case commute = "출근 충전"
+    case oneShot = "지금 충전"
     case manual = "수동 방전 중"
     case unavailable = "battery CLI 권한 없음"
 
@@ -127,7 +201,8 @@ final class Engine: ObservableObject {
     @Published var target: Int?          // 지금 적용 중인 목표 %
     @Published var adapterBlocked = Adapter.isBlocked()
     @Published var condition = "…"
-    @Published var nextDeparture: Date?
+    @Published var nextDeparture: Date?      // 다음 퇴근 충전 시각
+    @Published var nextCommute: Date?        // 다음 출근 충전 시각
     /// 수동 방전 상태 (AppDelegate 타이머가 갱신; 뷰는 이 값만 읽음)
     @Published var manualRunning = false
     @Published var manualTarget: Int?
@@ -201,26 +276,36 @@ final class Engine: ObservableObject {
         }
     }
 
-    // MARK: 퇴근 스케줄
+    // MARK: 일정 (출근·퇴근)
 
-    /// 오늘(또는 다음) 퇴근 시각
-    func departure(after now: Date = Date()) -> Date? {
-        guard settings.departureEnabled, !settings.departureWeekdays.isEmpty else { return nil }
+    /// 일정의 오늘(또는 다음) 시각. 시각 후 30분까지는 '오늘' 로 봄
+    func nextTime(_ k: ScheduleKind, after now: Date = Date()) -> Date? {
+        let v = settings.schedule(k)
+        guard v.enabled, !v.weekdays.isEmpty else { return nil }
         let cal = Calendar.current
         for dayOffset in 0..<8 {
             guard let day = cal.date(byAdding: .day, value: dayOffset, to: cal.startOfDay(for: now)) else { continue }
-            guard settings.departureWeekdays.contains(cal.component(.weekday, from: day)) else { continue }
-            let t = day.addingTimeInterval(TimeInterval(settings.departureMinutes * 60))
-            if t.addingTimeInterval(30 * 60) > now { return t } // 퇴근 후 30분까지는 '오늘' 로 봄
+            guard v.weekdays.contains(cal.component(.weekday, from: day)) else { continue }
+            let t = day.addingTimeInterval(TimeInterval(v.minutes * 60))
+            if t.addingTimeInterval(30 * 60) > now { return t }
         }
         return nil
     }
 
-    func inDepartureWindow(_ now: Date = Date()) -> Bool {
-        guard let dep = departure(after: now) else { return false }
-        let start = dep.addingTimeInterval(-TimeInterval(settings.departureLead * 60))
-        return now >= start && now <= dep.addingTimeInterval(30 * 60)
+    func inWindow(_ k: ScheduleKind, _ now: Date = Date()) -> Bool {
+        guard let t = nextTime(k, after: now) else { return false }
+        let start = t.addingTimeInterval(-TimeInterval(settings.schedule(k).lead * 60))
+        return now >= start && now <= t.addingTimeInterval(30 * 60)
     }
+
+    /// 지금 충전 구간인 일정 (여럿이면 목표가 높은 쪽)
+    func activeSchedule(_ now: Date = Date()) -> ScheduleKind? {
+        ScheduleKind.allCases.filter { inWindow($0, now) }.max { settings.schedule($0).target < settings.schedule($1).target }
+    }
+
+    // 예전 이름 유지 (대시보드 등)
+    func departure(after now: Date = Date()) -> Date? { nextTime(.leave, after: now) }
+    func inDepartureWindow(_ now: Date = Date()) -> Bool { inWindow(.leave, now) }
 
     /// 현재 충전 속도로 목표까지 걸릴 대략적인 분 (충전 중일 때만)
     func minutesToCharge(to target: Int) -> Int? {
@@ -235,8 +320,10 @@ final class Engine: ObservableObject {
     func tick() {
         guard let b = Battery.read() else { return }
         snapshot = b
-        nextDeparture = departure()
+        nextDeparture = nextTime(.leave)
+        nextCommute = nextTime(.commute)
         record(b)
+        updateOneShot(b)
 
         if manualDischarge() { mode = .manual; target = nil; adapterBlocked = Adapter.isBlocked(); return }
         guard Adapter.available else { mode = .unavailable; target = nil; return }
@@ -254,9 +341,12 @@ final class Engine: ObservableObject {
             // 클램쉘 + 화면 꺼짐: AC 유지 (깨우기 보장). 화면이 켜지면 다시 유지 모드.
             mode = settings.maintainEnabled ? .maintain : .off
             want = nil
-        } else if inDepartureWindow() {
-            mode = .departure
-            want = settings.departureTarget
+        } else if settings.oneShotTarget > 0 {
+            mode = .oneShot
+            want = settings.oneShotTarget
+        } else if let k = activeSchedule() {
+            mode = k == .commute ? .commute : .departure
+            want = settings.schedule(k).target
         } else if settings.maintainEnabled && (!settings.maintainOnlyClamshell || Battery.lidClosed()) {
             mode = .maintain
             want = settings.maintainLevel
@@ -276,6 +366,15 @@ final class Engine: ObservableObject {
             Adapter.setBlocked(false)           // 목표 100% 이거나 유지 꺼짐 → 정상 충전
         }
         adapterBlocked = Adapter.isBlocked()
+    }
+
+    /// 지금 충전 자동 해제: 목표에 닿은 뒤 어댑터를 뽑았거나(가지고 나감) 24시간이 지나면
+    private var oneShotReached = false
+    private func updateOneShot(_ b: BatterySnapshot) {
+        guard settings.oneShotTarget > 0 else { oneShotReached = false; return }
+        if Date().timeIntervalSince1970 - settings.oneShotSince > 24 * 3600 { settings.cancelOneShot(); return }
+        if b.percent >= min(settings.oneShotTarget, 100) - 1 { oneShotReached = true }
+        if oneShotReached && !b.plugged { settings.cancelOneShot(); oneShotReached = false }
     }
 
     private func record(_ b: BatterySnapshot) {

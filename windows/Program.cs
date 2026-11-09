@@ -174,7 +174,9 @@ public static class AutoStart
 {
     const string TaskName = "ClamshellDischarge";
 
-    public static bool Enabled => Run("/query /tn " + TaskName) == 0;
+    static bool? cached;
+    /// <summary>schtasks 를 매번 띄우지 않도록 결과를 기억 (화면은 3초마다 다시 그려짐)</summary>
+    public static bool Enabled => cached ??= Run("/query /tn " + TaskName) == 0;
 
     public static void Set(bool on)
     {
@@ -184,6 +186,7 @@ public static class AutoStart
             Run($"/create /tn {TaskName} /tr \"\\\"{exe}\\\"\" /sc onlogon /rl highest /f");
         }
         else Run($"/delete /tn {TaskName} /f");
+        cached = null;
     }
 
     static int Run(string args)

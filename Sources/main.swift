@@ -198,7 +198,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         b.imagePosition = .imageLeft
         var title = " \(snap.percent)%"
         if (isRunning || externalRunning), let t = currentDischargeTarget() { title += "→\(t)" }
-        else if engine.mode == .departure { title += "⏰" }
+        else if engine.mode == .departure || engine.mode == .commute { title += "⏰" }
+        else if engine.mode == .oneShot { title += "🧳" }
         b.title = title
         b.toolTip = "\(st.label)\(engine.target.map { tr(" · 목표 \($0)%") } ?? "")"
     }
@@ -300,6 +301,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         maintain.target = self
         maintain.state = settings.maintainEnabled ? .on : .off
         menu.addItem(maintain)
+        let com = NSMenuItem(title: tr("출근 충전 (\(settings.commuteTimeText) 까지 \(settings.commuteTarget)%)"), action: #selector(toggleCommute), keyEquivalent: "")
+        com.target = self
+        com.state = settings.commuteEnabled ? .on : .off
+        menu.addItem(com)
         let dep = NSMenuItem(title: tr("퇴근 충전 (\(settings.departureTimeText) 까지 \(settings.departureTarget)%)"), action: #selector(toggleDeparture), keyEquivalent: "")
         dep.target = self
         dep.state = settings.departureEnabled ? .on : .off
@@ -471,6 +476,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
     @objc func toggleMaintain() {
         settings.maintainEnabled.toggle()
         if settings.maintainEnabled { autoMode = true }
+        engine.tick(); refreshIcon()
+    }
+
+    @objc func toggleCommute() {
+        settings.commuteEnabled.toggle()
         engine.tick(); refreshIcon()
     }
 

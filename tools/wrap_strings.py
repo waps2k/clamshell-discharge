@@ -121,8 +121,9 @@ def transform(src):
             # enum raw value 줄 (case a = "..", b = "..") 은 통째로 건너뜀
             is_raw_case = re.match(r'\s*case\s+\w+\s*=', before) is not None
             skip_line = 'do shell script' in src[line_start:src.find('\n', i)]
+            if HANGUL.search(literal_text(parts)) and not is_raw_case and not skip_line:
+                KEYS.append(key_of(parts))   # 이미 tr( 로 감싼 것도 키 목록에는 포함 (번역 누락 검사용)
             if HANGUL.search(literal_text(parts)) and not already and not is_raw_case and not skip_line:
-                KEYS.append(key_of(parts))
                 out.append('tr(' + lit + ')')
             else:
                 out.append(lit)

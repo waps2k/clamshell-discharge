@@ -28,7 +28,8 @@ struct DashboardView: View {
                 chargeChart
                 sohChart
                 maintainSettings
-                departureSettings
+                scheduleSettings(.commute)
+                scheduleSettings(.leave)
             }
             .padding(20)
         }
@@ -110,6 +111,14 @@ struct DashboardView: View {
                                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                                 .annotation(position: .top, alignment: .leading) {
                                     Text(tr("유지 \(settings.maintainLevel)%")).font(.caption2).foregroundStyle(.blue)
+                                }
+                        }
+                        if settings.commuteEnabled && settings.commuteTarget != settings.departureTarget {
+                            RuleMark(y: .value(tr("출근"), settings.commuteTarget))
+                                .foregroundStyle(.teal)
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                                .annotation(position: .bottom, alignment: .leading) {
+                                    Text(tr("출근 충전 · 목표 \(settings.commuteTarget)%")).font(.caption2).foregroundStyle(.teal)
                                 }
                         }
                         if settings.departureEnabled {
@@ -210,50 +219,55 @@ struct DashboardView: View {
         }
     }
 
-    var departureSettings: some View {
-        GroupBox {
+    func scheduleSettings(_ k: ScheduleKind) -> some View {
+        let v = settings.schedule(k)
+        return GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                Toggle(isOn: $settings.departureEnabled) { Text(tr("퇴근 충전")).font(.headline) }
-                Text(tr("퇴근 시각 전에 유지 모드를 잠시 멈추고 목표까지 충전합니다. 퇴근 후 30분이 지나면 다시 유지 모드로 돌아갑니다."))
+                Toggle(isOn: Binding(get: { v.enabled }, set: { on in settings.update(k) { $0.enabled = on } })) {
+                    Text(k.title).font(.headline)
+                }
+                Text(k == .commute
+                     ? tr("출근 시각 전에 목표까지 충전합니다. 집에서 전원을 계속 연결해 둘 때 유용합니다.")
+                     : tr("퇴근 시각 전에 유지 모드를 잠시 멈추고 목표까지 충전합니다. 퇴근 후 30분이 지나면 다시 유지 모드로 돌아갑니다."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Group {
                     HStack {
-                        Text(tr("퇴근 시각"))
+                        Text(k == .commute ? tr("출근 시각") : tr("퇴근 시각"))
                         DatePicker("", selection: Binding(get: {
-                            Calendar.current.startOfDay(for: Date()).addingTimeInterval(TimeInterval(settings.departureMinutes * 60))
+                            Calendar.current.startOfDay(for: Date()).addingTimeInterval(TimeInterval(v.minutes * 60))
                         }, set: { d in
                             let c = Calendar.current.dateComponents([.hour, .minute], from: d)
-                            settings.departureMinutes = (c.hour ?? 18) * 60 + (c.minute ?? 0)
+                            settings.update(k) { $0.minutes = (c.hour ?? 0) * 60 + (c.minute ?? 0) }
                         }), displayedComponents: .hourAndMinute)
                         .labelsHidden()
                         .frame(width: 100)
                         Spacer()
-                        Stepper(tr("충전 시작: \(settings.departureLead)분 전"), value: $settings.departureLead, in: 15...240, step: 15)
+                        Stepper(tr("충전 시작: \(v.lead)분 전"), value: Binding(get: { v.lead }, set: { x in settings.update(k) { $0.lead = x } }), in: 15...240, step: 15)
                     }
                     HStack {
                         Text(tr("충전 목표"))
-                        Slider(value: Binding(get: { Double(settings.departureTarget) }, set: { settings.departureTarget = Int($0) }),
+                        Slider(value: Binding(get: { Double(v.target) }, set: { x in settings.update(k) { $0.target = Int(x) } }),
                                in: 60...100, step: 5)
-                        Text("\(settings.departureTarget)%").monospacedDigit().frame(width: 44, alignment: .trailing)
+                        Text("\(v.target)%").monospacedDigit().frame(width: 44, alignment: .trailing)
                     }
                     HStack(spacing: 6) {
                         Text(tr("요일"))
                         ForEach([(2, tr("월")), (3, tr("화")), (4, tr("수")), (5, tr("목")), (6, tr("금")), (7, tr("토")), (1, tr("일"))], id: \.0) { wd, name in
-                            Toggle(name, isOn: Binding(get: { settings.departureWeekdays.contains(wd) }, set: { on in
-                                if on { settings.departureWeekdays.insert(wd) } else { settings.departureWeekdays.remove(wd) }
+                            Toggle(name, isOn: Binding(get: { v.weekdays.contains(wd) }, set: { on in
+                                settings.update(k) { if on { $0.weekdays.insert(wd) } else { $0.weekdays.remove(wd) } }
                             }))
                             .toggleStyle(.button)
                             .controlSize(.small)
                         }
                     }
-                    if let dep = engine.nextDeparture {
-                        let start = dep.addingTimeInterval(-TimeInterval(settings.departureLead * 60))
-                        let est = estimateText
-                        Text(tr("다음 퇴근: \(dep.tDateTime) · 충전 시작 \(start.tTime)\(est)"))
+                    if let t = engine.nextTime(k) {
+                        let start = t.addingTimeInterval(-TimeInterval(v.lead * 60))
+                        let est = engine.minutesToCharge(to: v.target).map { tr(" · 지금 속도로 \(v.target)%까지 약 \($0)분") } ?? ""
+                        Text("\(k.title): \(t.tDateTime) · " + tr("충전 시작") + " \(start.tTime)\(est)")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .disabled(!settings.departureEnabled)
+                .disabled(!v.enabled)
             }
             .padding(4)
         }

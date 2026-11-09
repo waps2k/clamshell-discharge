@@ -16,6 +16,11 @@ macOS 판과 같은 화면 구성으로 만든 Windows 10/11 트레이 앱입니
 - ThinkPad: **Lenovo Power Management Driver** (Lenovo Vantage나 System Update로 설치됨)
 - IdeaPad/Yoga/Legion: **Lenovo Energy Management** 드라이버
 
+## 기능 (macOS 판과 같음)
+
+- 충전 유지(한도 방식), **출근 충전**·**퇴근 충전** 일정, **지금 충전 (출장·외출)** 80% / 100%
+- 대시보드(충전량, 일별 SOH), 사용 기록, 용량 막대, 다국어
+
 ## macOS 판과 다른 점
 
 - **"60% 유지"는 충전 한도 방식입니다.** Windows 노트북은 대부분 "어댑터를 꽂은 채 배터리 쓰기(능동 방전)"를 할 수 없습니다. 대신 꽂혀 있으면 정한 %에서 충전을 멈추고 전원으로 동작합니다. 이미 그보다 높으면, 배터리를 써서 내려올 때까지 기다리거나 어댑터를 잠시 뽑아야 합니다.

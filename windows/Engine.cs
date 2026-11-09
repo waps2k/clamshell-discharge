@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 
 namespace ClamshellDischarge;
 
-public enum Mode { Off, Maintain, Departure, Unavailable }
+public enum Mode { Off, Maintain, Departure, Commute, OneShot, Unavailable }
 
 public sealed record Sample(DateTime Date, int Percent, double Soh, int Cycles, bool Limited, bool Charging);
 
@@ -25,6 +25,7 @@ public sealed class Engine
     public int? Target { get; private set; }
     public int? AppliedLimit { get; private set; }
     public DateTime? NextDeparture { get; private set; }
+    public DateTime? NextCommute { get; private set; }
     public string LastError { get; private set; } = "";
 
     public event Action? Updated;
@@ -41,26 +42,37 @@ public sealed class Engine
         Tick();
     }
 
-    // ── 퇴근 일정 ──
+    // ── 일정 (출근·퇴근) ──
 
-    public DateTime? Departure(DateTime now)
+    public DateTime? NextTime(ScheduleKind k, DateTime now)
     {
-        if (!S.DepartureEnabled || S.DepartureWeekdays.Count == 0) return null;
+        var v = S.Schedule(k);
+        if (!v.Enabled || v.Weekdays.Count == 0) return null;
         for (int d = 0; d < 8; d++)
         {
             var day = now.Date.AddDays(d);
-            if (!S.DepartureWeekdays.Contains((int)day.DayOfWeek)) continue;
-            var t = day.AddMinutes(S.DepartureMinutes);
+            if (!v.Weekdays.Contains((int)day.DayOfWeek)) continue;
+            var t = day.AddMinutes(v.Minutes);
             if (t.AddMinutes(30) > now) return t;
         }
         return null;
     }
 
-    public bool InDepartureWindow(DateTime now)
+    public bool InWindow(ScheduleKind k, DateTime now)
     {
-        var dep = Departure(now);
-        return dep is DateTime t && now >= t.AddMinutes(-S.DepartureLead) && now <= t.AddMinutes(30);
+        var t = NextTime(k, now);
+        return t is DateTime x && now >= x.AddMinutes(-S.Schedule(k).Lead) && now <= x.AddMinutes(30);
     }
+
+    public ScheduleKind? ActiveSchedule(DateTime now)
+    {
+        ScheduleKind? best = null;
+        foreach (var k in new[] { ScheduleKind.Commute, ScheduleKind.Leave })
+            if (InWindow(k, now) && (best == null || S.Schedule(k).Target > S.Schedule(best.Value).Target)) best = k;
+        return best;
+    }
+
+    public DateTime? Departure(DateTime now) => NextTime(ScheduleKind.Leave, now);
 
     // ── 주기 작업 ──
 
@@ -68,13 +80,20 @@ public sealed class Engine
     {
         var now = DateTime.Now;
         Snapshot = Battery.Read();
-        NextDeparture = Departure(now);
+        NextDeparture = NextTime(ScheduleKind.Leave, now);
+        NextCommute = NextTime(ScheduleKind.Commute, now);
         Record();
+        UpdateOneShot();
 
         if (Controller.Kind == ControlKind.None) { Mode = Mode.Unavailable; Target = null; Updated?.Invoke(); return; }
 
         int? want = null;
-        if (InDepartureWindow(now)) { Mode = Mode.Departure; want = S.DepartureTarget; }
+        if (S.OneShotTarget > 0) { Mode = Mode.OneShot; want = S.OneShotTarget; }
+        else if (ActiveSchedule(now) is ScheduleKind k)
+        {
+            Mode = k == ScheduleKind.Commute ? Mode.Commute : Mode.Departure;
+            want = S.Schedule(k).Target;
+        }
         else if (S.MaintainEnabled)
         {
             Mode = Mode.Maintain;
@@ -98,6 +117,16 @@ public sealed class Engine
 
     /// <summary>설정 변경 직후: 다음 Tick 에서 반드시 다시 적용</summary>
     public void Reapply() { lastApplied = -1; ApplyLid(); Tick(); }
+
+    // 지금 충전 자동 해제: 목표에 닿은 뒤 어댑터를 뽑았거나(가지고 나감) 24시간이 지나면
+    bool oneShotReached;
+    void UpdateOneShot()
+    {
+        if (S.OneShotTarget <= 0) { oneShotReached = false; return; }
+        if ((DateTime.Now - S.OneShotSince).TotalHours > 24) { S.CancelOneShot(); return; }
+        if (Snapshot.Percent >= Math.Min(S.OneShotTarget, 100) - 1) oneShotReached = true;
+        if (oneShotReached && !Snapshot.PowerOnline) { oneShotReached = false; S.CancelOneShot(); }
+    }
 
     void Record()
     {

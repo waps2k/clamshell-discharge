@@ -107,7 +107,8 @@ struct PopoverView: View {
     @ObservedObject var engine = Engine.shared
     @ObservedObject var settings = Settings.shared
     let actions: AppActions
-    @State private var tick = 0 // 메뉴 상태(로그인 항목 등) 재계산용
+    @State private var tick = 0
+    @State private var expanded: ScheduleKind? = nil  // 편집 칸을 펼친 일정 // 메뉴 상태(로그인 항목 등) 재계산용
 
     static let columnWidth: CGFloat = 300
 
@@ -162,9 +163,16 @@ struct PopoverView: View {
             .foregroundStyle(st.color)
             .padding(.horizontal, 12).padding(.vertical, 5)
             .background(Capsule().fill(st.color.opacity(0.14)))
-            if let t = engine.target, engine.mode == .maintain || engine.mode == .departure {
-                Text(engine.mode == .departure ? tr("퇴근 충전 · 목표 \(t)%") : tr("유지 모드 · \(t - settings.band)~\(t)%"))
-                    .font(.caption).foregroundStyle(.secondary)
+            if let t = engine.target, [.maintain, .departure, .commute, .oneShot].contains(engine.mode) {
+                Group {
+                    switch engine.mode {
+                    case .maintain: Text(tr("유지 모드 · \(t - settings.band)~\(t)%"))
+                    case .commute: Text(tr("출근 충전 · 목표 \(t)%"))
+                    case .oneShot: Text(tr("지금 충전 · 목표 \(t)%"))
+                    default: Text(tr("퇴근 충전 · 목표 \(t)%"))
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -241,6 +249,9 @@ struct PopoverView: View {
             default:
                 row(tr("남은 사용 시간"), b.timeToEmpty.map(fmtMinutes) ?? tr("계산 중"))
             }
+            if settings.commuteEnabled, let t = engine.nextCommute {
+                row(tr("다음 출근 충전"), "\(t.tTime) · \(settings.commuteTarget)%")
+            }
             if settings.departureEnabled, let dep = engine.nextDeparture {
                 row(tr("다음 퇴근 충전"), "\(dep.tTime) · \(settings.departureTarget)%")
             }
@@ -301,16 +312,10 @@ struct PopoverView: View {
                     Spacer(minLength: 0)
                 }
             }
-            Toggle(isOn: $settings.departureEnabled) {
-                HStack {
-                    Text(tr("퇴근 충전"))
-                    Spacer()
-                    Text("\(settings.departureTimeText) · \(settings.departureTarget)%").foregroundStyle(.secondary)
-                }
+            ForEach(ScheduleKind.allCases) { k in
+                scheduleRow(k)
             }
-            if settings.departureEnabled {
-                departureEditor
-            }
+            oneShotRow
             Toggle(isOn: $settings.autoMode) {
                 HStack {
                     Text(tr("자동 업무 모드"))
@@ -417,34 +422,64 @@ struct PopoverView: View {
         .id(tick)
     }
 
-    // MARK: 퇴근 충전 편집
+    // MARK: 일정 충전 (출근·퇴근)
 
-    var departureEditor: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            // 퇴근 시각: −/+ 15분, 큰 숫자, 자주 쓰는 시각은 메뉴로
+    /// 켜고 끄는 줄 + (펼친 일정만) 편집 칸. 줄을 누르면 펼치기/접기
+    func scheduleRow(_ k: ScheduleKind) -> some View {
+        let v = settings.schedule(k)
+        return VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: Binding(get: { v.enabled }, set: { on in
+                settings.update(k) { $0.enabled = on }
+                if on { expanded = k }
+            })) {
+                HStack(spacing: 4) {
+                    Text(k.title)
+                    if v.enabled {
+                        Image(systemName: expanded == k ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text("\(v.timeText) · \(v.target)%").monospacedDigit().foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { if v.enabled { expanded = expanded == k ? nil : k } }
+            }
+            if v.enabled && expanded == k {
+                scheduleEditor(k)
+            }
+        }
+    }
+
+    func scheduleEditor(_ k: ScheduleKind) -> some View {
+        let v = settings.schedule(k)
+        let presets = k == .commute
+            ? [6 * 60 + 30, 7 * 60, 7 * 60 + 30, 8 * 60, 8 * 60 + 30, 9 * 60, 9 * 60 + 30]
+            : [16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60]
+        return VStack(alignment: .leading, spacing: 9) {
+            // 시각: −/+ 15분, 자주 쓰는 시각은 메뉴로
             HStack(spacing: 8) {
-                Text(tr("퇴근")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
-                stepButton("minus") { shiftDeparture(-15) }
+                Text(k.shortTitle).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
+                stepButton("minus") { settings.update(k) { $0.minutes = ($0.minutes - 15 + 1440) % 1440 } }
                 Menu {
-                    ForEach([16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60], id: \.self) { m in
-                        Button(String(format: "%02d:%02d", m / 60, m % 60)) { settings.departureMinutes = m }
+                    ForEach(presets, id: \.self) { m in
+                        Button(String(format: "%02d:%02d", m / 60, m % 60)) { settings.update(k) { $0.minutes = m } }
                     }
                 } label: {
-                    Text(settings.departureTimeText)
+                    Text(v.timeText)
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                stepButton("plus") { shiftDeparture(15) }
+                stepButton("plus") { settings.update(k) { $0.minutes = ($0.minutes + 15) % 1440 } }
                 Spacer()
                 Menu {
                     ForEach([30, 60, 90, 120, 180], id: \.self) { m in
-                        Button(tr("\(m)분 전부터 충전")) { settings.departureLead = m }
+                        Button(tr("\(m)분 전부터 충전")) { settings.update(k) { $0.lead = m } }
                     }
                 } label: {
-                    Text(tr("\(settings.departureLead)분 전 시작")).font(.caption)
+                    Text(tr("\(v.lead)분 전 시작")).font(.caption)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -454,13 +489,13 @@ struct PopoverView: View {
             HStack(spacing: 6) {
                 Text(tr("목표")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
                 ForEach([80, 90, 100], id: \.self) { t in
-                    chip("\(t)%", selected: settings.departureTarget == t) { settings.departureTarget = t }
+                    chip("\(t)%", selected: v.target == t) { settings.update(k) { $0.target = t } }
                 }
                 Spacer()
-                Text("\(settings.departureTarget)%")
+                Text("\(v.target)%")
                     .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
             }
-            Slider(value: Binding(get: { Double(settings.departureTarget) }, set: { settings.departureTarget = Int($0) }),
+            Slider(value: Binding(get: { Double(v.target) }, set: { x in settings.update(k) { $0.target = Int(x) } }),
                    in: 60...100, step: 5)
                 .padding(.leading, 52)
 
@@ -468,17 +503,15 @@ struct PopoverView: View {
             HStack(spacing: 4) {
                 Text(tr("요일")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
                 ForEach([(2, tr("월")), (3, tr("화")), (4, tr("수")), (5, tr("목")), (6, tr("금")), (7, tr("토")), (1, tr("일"))], id: \.0) { wd, name in
-                    chip(name, selected: settings.departureWeekdays.contains(wd), compact: true) {
-                        if settings.departureWeekdays.contains(wd) { settings.departureWeekdays.remove(wd) }
-                        else { settings.departureWeekdays.insert(wd) }
+                    chip(name, selected: v.weekdays.contains(wd), compact: true) {
+                        settings.update(k) { if $0.weekdays.contains(wd) { $0.weekdays.remove(wd) } else { $0.weekdays.insert(wd) } }
                     }
                 }
             }
 
-            if let dep = engine.nextDeparture {
-                let start = dep.addingTimeInterval(-TimeInterval(settings.departureLead * 60))
-                Label(tr("\(start.tTime)부터 충전 → \(dep.tWeekdayTime)까지 \(settings.departureTarget)%"),
-                      systemImage: "clock")
+            if let t = engine.nextTime(k) {
+                let start = t.addingTimeInterval(-TimeInterval(v.lead * 60))
+                Label(tr("\(start.tTime)부터 충전 → \(t.tWeekdayTime)까지 \(v.target)%"), systemImage: "clock")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
                 Text(tr("요일을 하나 이상 선택하세요")).font(.caption2).foregroundStyle(.orange)
@@ -489,8 +522,40 @@ struct PopoverView: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.07)))
     }
 
-    func shiftDeparture(_ delta: Int) {
-        settings.departureMinutes = (settings.departureMinutes + delta + 1440) % 1440
+    // MARK: 지금 충전 (출장·외출)
+
+    var oneShotRow: some View {
+        let t = settings.oneShotTarget
+        let b = engine.snapshot
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "suitcase.rolling.fill").foregroundStyle(t > 0 ? Color.accentColor : .secondary)
+                Text(tr("지금 충전 (출장·외출)"))
+                Spacer()
+                chip("80%", selected: t == 80) { t == 80 ? settings.cancelOneShot() : settings.startOneShot(80) }
+                chip("100%", selected: t == 100) { t == 100 ? settings.cancelOneShot() : settings.startOneShot(100) }
+            }
+            if t > 0 {
+                HStack {
+                    if b.percent >= t - 1 {
+                        Text(tr("충전 완료")).foregroundStyle(.green)
+                    } else if let m = engine.minutesToCharge(to: t) {
+                        Text(tr("\(t)%까지") + " " + fmtMinutes(m)).foregroundStyle(.secondary)
+                    } else {
+                        Text(tr("목표 \(t)%")).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(tr("해제")) { settings.cancelOneShot() }.controlSize(.mini)
+                }
+                .font(.caption)
+                Text(tr("목표에 도달한 뒤 어댑터를 뽑으면 자동으로 해제됩니다 (최대 24시간)"))
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if t == 100 {
+                    Text(tr("macOS 충전 한도가 설정돼 있으면 그 이상은 충전되지 않습니다"))
+                        .font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 
     func stepButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {

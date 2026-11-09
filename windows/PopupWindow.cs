@@ -136,7 +136,13 @@ public sealed class PopupWindow : Window
         var items = new System.Collections.Generic.List<UIElement> { top, badge };
         if (E.Target is int t)
         {
-            var sub = E.Mode == Mode.Departure ? L10n.Tr("퇴근 충전 · 목표 %@%", t) : L10n.Tr("유지 %@%", t);
+            var sub = E.Mode switch
+            {
+                Mode.Departure => L10n.Tr("퇴근 충전 · 목표 %@%", t),
+                Mode.Commute => L10n.Tr("출근 충전 · 목표 %@%", t),
+                Mode.OneShot => L10n.Tr("지금 충전 · 목표 %@%", t),
+                _ => L10n.Tr("유지 %@%", t),
+            };
             var tb = Ui.Text(sub, 11.5, Theme.Secondary); tb.HorizontalAlignment = HorizontalAlignment.Center;
             items.Add(tb);
         }
@@ -157,6 +163,8 @@ public sealed class PopupWindow : Window
         else if (st == ChargeState.OnBattery)
             rows.Add(Ui.Row(L10n.Tr("남은 사용 시간"), b.MinutesRemaining is int m ? StateText.Minutes(m) : L10n.Tr("계산 중")));
         else rows.Add(Ui.Row(L10n.Tr("충전"), L10n.Tr("대기")));
+        if (S.CommuteEnabled && E.NextCommute is DateTime com)
+            rows.Add(Ui.Row(L10n.Tr("다음 출근 충전"), $"{L10n.Time(com)} · {S.CommuteTarget}%"));
         if (S.DepartureEnabled && E.NextDeparture is DateTime dep)
             rows.Add(Ui.Row(L10n.Tr("다음 퇴근 충전"), $"{L10n.Time(dep)} · {S.DepartureTarget}%"));
         return Ui.V(5, rows.ToArray());
@@ -193,9 +201,20 @@ public sealed class PopupWindow : Window
         else if (S.MaintainEnabled && c.Kind == ControlKind.Conservation)
             items.Add(Ui.Text(L10n.Tr("이 기기는 정해진 수준(약 %@%)으로만 유지할 수 있습니다.", c.FixedLevel), 11.5, Theme.Secondary));
 
-        // 퇴근 충전
-        items.Add(Ui.ToggleRow(L10n.Tr("퇴근 충전"), $"{S.DepartureTimeText} · {S.DepartureTarget}%", S.DepartureEnabled, on => S.Update(s => s.DepartureEnabled = on), can));
-        if (S.DepartureEnabled) items.Add(DepartureEditor());
+        // 일정 충전 (출근·퇴근): 켜진 일정의 줄을 누르면 편집 칸 펼치기/접기
+        foreach (var k in new[] { ScheduleKind.Commute, ScheduleKind.Leave })
+        {
+            var v = S.Schedule(k);
+            var label = Ui.Text(k.Title() + (v.Enabled ? (expanded == k ? "  ▴" : "  ▾") : ""), 14);
+            label.Cursor = v.Enabled ? System.Windows.Input.Cursors.Hand : null;
+            label.MouseLeftButtonUp += (_, _) => { if (v.Enabled) { expanded = expanded == k ? null : k; Rebuild(); } };
+            items.Add(Ui.Spread(label, Ui.H(10, Ui.Text($"{v.TimeText} · {v.Target}%", 13, Theme.Secondary),
+                Ui.Switch(v.Enabled, on => { if (on) expanded = k; S.UpdateSchedule(k, x => x with { Enabled = on }); }, can))));
+            if (v.Enabled && expanded == k) items.Add(ScheduleEditor(k));
+        }
+
+        // 지금 충전 (출장·외출)
+        if (can) items.Add(OneShotRow());
 
         // 덮개 닫힘
         items.Add(Ui.ToggleRow(L10n.Tr("덮개 닫아도 동작 (전원 연결 시)"), "", S.LidStayAwake, on => { S.Update(s => s.LidStayAwake = on); E.Reapply(); }));
@@ -209,54 +228,79 @@ public sealed class PopupWindow : Window
         return Ui.V(10, items.ToArray());
     }
 
-    UIElement DepartureEditor()
+    ScheduleKind? expanded;
+
+    UIElement ScheduleEditor(ScheduleKind k)
     {
+        var v = S.Schedule(k);
+        void Set(Func<ScheduleValues, ScheduleValues> f) => S.UpdateSchedule(k, f);
+
+        var presetTimes = k == ScheduleKind.Commute
+            ? new[] { 6 * 60 + 30, 7 * 60, 7 * 60 + 30, 8 * 60, 8 * 60 + 30, 9 * 60, 9 * 60 + 30 }
+            : new[] { 16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60 };
         var presets = new ContextMenu();
-        foreach (var m in new[] { 16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60 })
+        foreach (var m in presetTimes)
         {
             var mi = new MenuItem { Header = $"{m / 60:00}:{m % 60:00}" };
-            mi.Click += (_, _) => S.Update(s => s.DepartureMinutes = m);
+            mi.Click += (_, _) => Set(x => x with { Minutes = m });
             presets.Items.Add(mi);
         }
-        var timeLabel = Ui.WithMenu(Ui.ChipNoAction(S.DepartureTimeText), presets);
+        var timeLabel = Ui.WithMenu(Ui.ChipNoAction(v.TimeText), presets);
 
         var leadMenu = new ContextMenu();
         foreach (var m in new[] { 30, 60, 90, 120, 180 })
         {
             var mi = new MenuItem { Header = L10n.Tr("%@분 전부터 충전", m) };
-            mi.Click += (_, _) => S.Update(s => s.DepartureLead = m);
+            mi.Click += (_, _) => Set(x => x with { Lead = m });
             leadMenu.Items.Add(mi);
         }
-        var lead = Ui.WithMenu(Ui.ChipNoAction(L10n.Tr("%@분 전 시작", S.DepartureLead) + " ▾"), leadMenu);
+        var lead = Ui.WithMenu(Ui.ChipNoAction(L10n.Tr("%@분 전 시작", v.Lead) + " ▾"), leadMenu);
 
         UIElement Label(string t) { var x = Ui.Text(t, 13, Theme.Secondary); x.Width = 46; return x; }
 
-        var timeRow = Ui.Spread(Ui.H(8, Label(L10n.Tr("퇴근")),
-                Ui.CircleButton("−", () => Shift(-15)), timeLabel, Ui.CircleButton("+", () => Shift(15))), lead);
+        var timeRow = Ui.Spread(Ui.H(8, Label(k.Short()),
+                Ui.CircleButton("−", () => Set(x => x with { Minutes = (x.Minutes - 15 + 1440) % 1440 })), timeLabel,
+                Ui.CircleButton("+", () => Set(x => x with { Minutes = (x.Minutes + 15) % 1440 }))), lead);
 
         var targetRow = Ui.Spread(Ui.H(6, Label(L10n.Tr("목표")),
-                Ui.Chip("80%", S.DepartureTarget == 80, () => S.Update(s => s.DepartureTarget = 80)),
-                Ui.Chip("90%", S.DepartureTarget == 90, () => S.Update(s => s.DepartureTarget = 90)),
-                Ui.Chip("100%", S.DepartureTarget == 100, () => S.Update(s => s.DepartureTarget = 100))),
-            Ui.Text($"{S.DepartureTarget}%", 15, null, FontWeights.SemiBold));
+                Ui.Chip("80%", v.Target == 80, () => Set(x => x with { Target = 80 })),
+                Ui.Chip("90%", v.Target == 90, () => Set(x => x with { Target = 90 })),
+                Ui.Chip("100%", v.Target == 100, () => Set(x => x with { Target = 100 }))),
+            Ui.Text($"{v.Target}%", 15, null, FontWeights.SemiBold));
 
-        var slider = Ui.Slider(S.DepartureTarget, 60, 100, 5, v => S.Update(s => s.DepartureTarget = v));
+        var slider = Ui.Slider(v.Target, 60, 100, 5, t => Set(x => x with { Target = t }));
         slider.Margin = new Thickness(52, 0, 0, 0);
 
         var days = new[] { (1, "월"), (2, "화"), (3, "수"), (4, "목"), (5, "금"), (6, "토"), (0, "일") };
         var dayRow = Ui.H(4, new UIElement[] { Label(L10n.Tr("요일")) }.Concat(days.Select(d =>
-            (UIElement)Ui.Chip(L10n.Tr(d.Item2), S.DepartureWeekdays.Contains(d.Item1), () => S.Update(s =>
+            (UIElement)Ui.Chip(L10n.Tr(d.Item2), v.Weekdays.Contains(d.Item1), () => Set(x =>
             {
-                if (!s.DepartureWeekdays.Remove(d.Item1)) s.DepartureWeekdays.Add(d.Item1);
+                var w = new System.Collections.Generic.List<int>(x.Weekdays);
+                if (!w.Remove(d.Item1)) w.Add(d.Item1);
+                return x with { Weekdays = w };
             }), true))).ToArray());
 
-        UIElement summary = E.NextDeparture is DateTime dep
-            ? Ui.Text("🕓 " + L10n.Tr("%@부터 충전 → %@까지 %@%", L10n.Time(dep.AddMinutes(-S.DepartureLead)), L10n.WeekdayTime(dep), S.DepartureTarget), 11.5, Theme.Secondary)
+        UIElement summary = E.NextTime(k, DateTime.Now) is DateTime t0
+            ? Ui.Text("🕓 " + L10n.Tr("%@부터 충전 → %@까지 %@%", L10n.Time(t0.AddMinutes(-v.Lead)), L10n.WeekdayTime(t0), v.Target), 11.5, Theme.Secondary)
             : Ui.Text(L10n.Tr("요일을 하나 이상 선택하세요"), 11.5, Theme.Orange);
 
         return Ui.Card(Ui.V(9, timeRow, targetRow, slider, dayRow, summary));
+    }
 
-        void Shift(int d) => S.Update(s => s.DepartureMinutes = (s.DepartureMinutes + d + 1440) % 1440);
+    UIElement OneShotRow()
+    {
+        int t = S.OneShotTarget;
+        var head = Ui.Spread(Ui.Text("🧳 " + L10n.Tr("지금 충전 (출장·외출)"), 14),
+            Ui.H(6,
+                Ui.Chip("80%", t == 80, () => { if (t == 80) S.CancelOneShot(); else S.StartOneShot(80); }),
+                Ui.Chip("100%", t == 100, () => { if (t == 100) S.CancelOneShot(); else S.StartOneShot(100); })));
+        if (t <= 0) return head;
+        var b = E.Snapshot;
+        string status = b.Percent >= t - 1 ? L10n.Tr("충전 완료")
+            : b.MinutesTo(t) is int m ? L10n.Tr("%@%까지", t) + " " + StateText.Minutes(m) : L10n.Tr("목표 %@%", t);
+        return Ui.V(6, head,
+            Ui.Spread(Ui.Text(status, 12, b.Percent >= t - 1 ? Theme.Green : Theme.Secondary), Ui.Chip(L10n.Tr("해제"), false, () => S.CancelOneShot())),
+            Ui.Text(L10n.Tr("목표에 도달한 뒤 어댑터를 뽑으면 자동으로 해제됩니다 (최대 24시간)"), 11, Theme.Secondary));
     }
 
     UIElement Footer()
