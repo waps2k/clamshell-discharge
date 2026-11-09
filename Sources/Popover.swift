@@ -314,6 +314,9 @@ struct PopoverView: View {
                     Text("\(settings.departureTimeText) · \(settings.departureTarget)%").foregroundStyle(.secondary)
                 }
             }
+            if settings.departureEnabled {
+                departureEditor
+            }
             Toggle(isOn: $settings.autoMode) {
                 HStack {
                     Text("자동 업무 모드")
@@ -357,6 +360,103 @@ struct PopoverView: View {
         }
         .toggleStyle(.switch)
         .controlSize(.small)
+    }
+
+    // MARK: 퇴근 충전 편집
+
+    var departureEditor: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            // 퇴근 시각: −/+ 15분, 큰 숫자, 자주 쓰는 시각은 메뉴로
+            HStack(spacing: 8) {
+                Text("퇴근").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                stepButton("minus") { shiftDeparture(-15) }
+                Menu {
+                    ForEach([16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60], id: \.self) { m in
+                        Button(String(format: "%02d:%02d", m / 60, m % 60)) { settings.departureMinutes = m }
+                    }
+                } label: {
+                    Text(settings.departureTimeText)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                stepButton("plus") { shiftDeparture(15) }
+                Spacer()
+                Menu {
+                    ForEach([30, 60, 90, 120, 180], id: \.self) { m in
+                        Button("\(m)분 전부터 충전") { settings.departureLead = m }
+                    }
+                } label: {
+                    Text("\(settings.departureLead)분 전 시작").font(.caption)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+
+            // 목표: 프리셋 칩 + 미세 조정 슬라이더
+            HStack(spacing: 6) {
+                Text("목표").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                ForEach([80, 90, 100], id: \.self) { t in
+                    chip("\(t)%", selected: settings.departureTarget == t) { settings.departureTarget = t }
+                }
+                Spacer()
+                Text("\(settings.departureTarget)%")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
+            }
+            Slider(value: Binding(get: { Double(settings.departureTarget) }, set: { settings.departureTarget = Int($0) }),
+                   in: 60...100, step: 5)
+                .padding(.leading, 40)
+
+            // 요일
+            HStack(spacing: 4) {
+                Text("요일").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                ForEach([(2, "월"), (3, "화"), (4, "수"), (5, "목"), (6, "금"), (7, "토"), (1, "일")], id: \.0) { wd, name in
+                    chip(name, selected: settings.departureWeekdays.contains(wd), compact: true) {
+                        if settings.departureWeekdays.contains(wd) { settings.departureWeekdays.remove(wd) }
+                        else { settings.departureWeekdays.insert(wd) }
+                    }
+                }
+            }
+
+            if let dep = engine.nextDeparture {
+                let start = dep.addingTimeInterval(-TimeInterval(settings.departureLead * 60))
+                Label("\(start.formatted(date: .omitted, time: .shortened))부터 충전 → \(dep.formatted(.dateTime.weekday(.abbreviated).hour().minute()))까지 \(settings.departureTarget)%",
+                      systemImage: "clock")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else {
+                Text("요일을 하나 이상 선택하세요").font(.caption2).foregroundStyle(.orange)
+            }
+        }
+        .font(.callout)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.07)))
+    }
+
+    func shiftDeparture(_ delta: Int) {
+        settings.departureMinutes = (settings.departureMinutes + delta + 1440) % 1440
+    }
+
+    func stepButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 10, weight: .bold)).frame(width: 20, height: 20)
+        }
+        .buttonStyle(.plain)
+        .background(Circle().fill(Color.secondary.opacity(0.15)))
+    }
+
+    func chip(_ title: String, selected: Bool, compact: Bool = false, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(compact ? .caption : .caption.weight(.medium))
+                .frame(minWidth: compact ? 22 : 38)
+                .padding(.vertical, 3)
+                .padding(.horizontal, compact ? 2 : 6)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(Capsule().fill(selected ? Color.accentColor : Color.secondary.opacity(0.15)))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: 상위 프로세스
