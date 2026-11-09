@@ -330,6 +330,7 @@ struct PopoverView: View {
                 }
             }
             .disabled(!actions.permissionReady())
+            Toggle(tr("전원 연결 시 화면 켜두기"), isOn: $settings.keepDisplayOnAC)
             Toggle(isOn: Binding(get: { settings.hidWake }, set: { on in
                 settings.hidWake = on
                 if on && !HIDWaker.shared.accessGranted { HIDWaker.shared.requestAccess() }

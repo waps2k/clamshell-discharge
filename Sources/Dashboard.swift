@@ -217,6 +217,7 @@ struct DashboardView: View {
                 Toggle(tr("덮개가 닫혀 있을 때(클램쉘)만 적용"), isOn: $settings.maintainOnlyClamshell)
                     .disabled(!settings.maintainEnabled)
                 Toggle(tr("자동 업무 모드 (전원 연결 시 덮개 닫아도 동작, 배터리면 잠자기)"), isOn: $settings.autoMode)
+                Toggle(tr("전원 연결 시 화면 켜두기 (화면 자동 꺼짐 방지)"), isOn: $settings.keepDisplayOnAC)
             }
             .padding(4)
         }

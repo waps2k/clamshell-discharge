@@ -50,6 +50,8 @@ final class Settings: ObservableObject {
     @Published var language: String { didSet { d.set(language, forKey: "language") } }
     /// 화면이 꺼져 있을 때 블루투스(및 모든) 키보드/마우스 입력으로 화면 켜기
     @Published var hidWake: Bool { didSet { d.set(hidWake, forKey: "hidWake") } }
+    /// 전원(어댑터) 연결 중에는 화면이 저절로 꺼지지 않게 (세일링 중 포함)
+    @Published var keepDisplayOnAC: Bool { didSet { d.set(keepDisplayOnAC, forKey: "keepDisplayOnAC") } }
 
     let band = 3 // 세일링 폭: 목표에 닿으면 어댑터 차단, 목표-3% 까지 내려오면 다시 충전
 
@@ -60,7 +62,7 @@ final class Settings: ObservableObject {
             "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6],
             "commuteEnabled": false, "commuteMinutes": 8 * 60, "commuteTarget": 80, "commuteLead": 90,
             "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "oneShotDepartAt": 0.0,
-            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "language": "system",
+            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -85,6 +87,7 @@ final class Settings: ObservableObject {
         oneShotSince = d.double(forKey: "oneShotSince")
         autoMode = d.bool(forKey: "autoMode")
         hidWake = d.bool(forKey: "hidWake")
+        keepDisplayOnAC = d.bool(forKey: "keepDisplayOnAC")
         language = d.string(forKey: "language") ?? "system"
     }
 
