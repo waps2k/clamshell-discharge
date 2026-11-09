@@ -14,6 +14,8 @@ final class HIDWaker {
     private var manager: IOHIDManager?
     private var lastFire = Date.distantPast
     private var assertion: IOPMAssertionID = 0
+    /// 입력이 들어왔을 때 화면을 켜기 전에 할 일 (예: 어댑터 차단을 풀어 AC 로 전환)
+    var onInput: (() -> Void)?
 
     var accessGranted: Bool { IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted }
 
@@ -56,6 +58,7 @@ final class HIDWaker {
         // 마우스 이동은 초당 수십 번 오므로 2초에 한 번만
         guard Date().timeIntervalSince(lastFire) > 2 else { return }
         lastFire = Date()
+        onInput?()
         IOPMAssertionDeclareUserActivity("Clamshell Discharge: Bluetooth input" as CFString,
                                          kIOPMUserActiveLocal, &assertion)
     }

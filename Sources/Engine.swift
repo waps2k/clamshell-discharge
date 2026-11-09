@@ -268,7 +268,8 @@ final class Engine: ObservableObject {
 
     private var timer: Timer?
     /// 디스플레이가 잠든 상태. 덮개 닫힘 + 배터리 전원이면 macOS 가 USB 키보드/마우스로 화면을
-    /// 깨우지 않으므로, 이 동안에는 어댑터 차단을 풀어 AC 전원으로 둔다.
+    /// 깨우지 않는다. 입력 모니터링 권한이 있으면 앱이 입력을 직접 감지하므로 차단을 유지하고
+    /// (밤새 60%→80%→60% 왕복을 막음), 권한이 없을 때만 어댑터 차단을 풀어 AC 전원으로 둔다.
     @Published var displaysAsleep = false
     private var lastSampleAt = Date.distantPast
     private var bag = Set<AnyCancellable>()
@@ -287,9 +288,20 @@ final class Engine: ObservableObject {
         nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.displaysAsleep = true
-            if self.settings.hidWake { HIDWaker.shared.start() }
-            // 덮개가 닫혀 있으면 바로 AC 로 돌려서 키보드/마우스로 깨울 수 있게
-            if Battery.lidClosed() && Adapter.isBlocked() && !self.manualDischarge() {
+            if HIDWaker.shared.accessGranted {
+                // 입력을 앱이 감지 → 차단 유지 (첫 입력 때 AC 로 바꾸고 화면을 켬)
+                HIDWaker.shared.start()
+            } else if Battery.lidClosed() && Adapter.isBlocked() && !self.manualDischarge() {
+                // 권한이 없으면 깨우기를 보장하기 위해 바로 AC 로
+                Adapter.setBlocked(false)
+                self.adapterBlocked = false
+            }
+        }
+        // 화면이 꺼진 동안 키보드/마우스 입력이 오면: 덮개 닫힘 + 차단 중이면 먼저 AC 로 전환
+        // (배터리 전원 클램쉘에서는 macOS 가 화면을 켜지 않으므로), 그다음 HIDWaker 가 화면을 켬
+        HIDWaker.shared.onInput = { [weak self] in
+            guard let self, self.displaysAsleep, !self.manualDischarge() else { return }
+            if Battery.lidClosed() && Adapter.isBlocked() {
                 Adapter.setBlocked(false)
                 self.adapterBlocked = false
             }
@@ -387,8 +399,8 @@ final class Engine: ObservableObject {
         }
 
         var want: Int?
-        if displaysAsleep && Battery.lidClosed() {
-            // 클램쉘 + 화면 꺼짐: AC 유지 (깨우기 보장). 화면이 켜지면 다시 유지 모드.
+        if displaysAsleep && Battery.lidClosed() && !HIDWaker.shared.accessGranted {
+            // 클램쉘 + 화면 꺼짐 + 입력 모니터링 권한 없음: AC 유지 (깨우기 보장). 화면이 켜지면 다시 유지 모드.
             mode = settings.maintainEnabled ? .maintain : .off
             want = nil
         } else if settings.oneShotTarget > 0 && oneShotShouldCharge(b) {

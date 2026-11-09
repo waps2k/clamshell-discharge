@@ -55,7 +55,7 @@ This app holds a charge range using the adapter-block key (`CHIE`) and handles t
 | **Schedule editor** | Commute, leave and weekend outing charge share one editor: time (−/+ 15 min, menu of common times), start lead (30–180 min before), target (80/90/100% or a 60–100% slider), and days. |
 | **Auto work mode** | While plugged in with an external monitor, the Mac stays awake with the lid closed (even while the adapter is blocked). On battery, or with the lid closed and no monitor, it sleeps right away. |
 | **Leave detection** | If you unplug the external monitor or the adapter with the lid closed, it stops discharging/blocking, restores the sleep setting, and sleeps immediately. |
-| **Wake the display** | When the displays sleep in clamshell mode, it unblocks the adapter so the Mac is back on AC power and a USB keyboard or mouse can wake it. It also detects Bluetooth input to turn the display on (needs Input Monitoring). |
+| **Wake the display** | In clamshell mode a USB or Bluetooth keyboard/mouse can wake the displays. **With Input Monitoring allowed**, the adapter stays blocked while the displays sleep, so the battery holds near 60%; on input the app switches to AC and turns the display on. Without the permission it switches to AC as soon as the displays sleep to guarantee waking (the battery may then charge to 80%). |
 | **Manual discharge** | Discharges to a target (50–90%) while plugged in. You can change the target while it runs, and it stays awake in clamshell mode. |
 | **Popover (main screen)** | Battery % and state, 4-hour usage history, power source and time remaining, a capacity bar (current / max / design) with SOH, power, current, voltage, cycles and temperature, plus controls for every mode. Everything fits on one screen without scrolling. |
 | **Dashboard** | Charge chart (6 h to 30 days), daily SOH chart, and detailed settings for maintain charge and the commute/leave/weekend schedules (time entry to the minute). History is saved locally every minute and kept for 90 days. |
@@ -118,14 +118,14 @@ Rule added by the sleep control permission:
 3. Under **Modes**, turn on:
    - **Maintain charge 60%**: auto work mode turns on with it. For **Apply** just below, **Always** is recommended, so it also holds 60% while you work at home with the lid open. **Lid closed only** holds it only in clamshell mode (e.g. at the office).
    - **Commute charge / Leave charge**: set your commute and leave times and targets ([see below](#set-commute-and-leave-times)).
-   - **Bluetooth wake**: turn it on if you use a Bluetooth keyboard or trackpad, and allow Input Monitoring.
+   - **Bluetooth wake**: turn it on and allow Input Monitoring. It detects USB input as well as Bluetooth. With this permission, a closed lid overnight holds near 60% instead of charging to 80% and draining back to 60%.
 4. Turn on ⚙︎ → **Open at login**.
 
 ### Day to day (office, lid closed, external monitor)
 
 - Just use your Mac. Above 60% it blocks the adapter and runs down on battery (⛵); at 57% it charges again.
 - It stays awake with the lid closed (auto work mode).
-- When you step away and the monitor turns off, it switches back to AC power for a while. Press a key or move the mouse and the display comes back, then maintain mode resumes.
+- When you step away and the monitor turns off, it keeps holding near 60% (with Input Monitoring allowed). Press a key or move the mouse and the app switches to AC and turns the display on, then maintain mode resumes.
 
 ### Set commute and leave times
 
@@ -226,7 +226,7 @@ Right-click for a short menu (discharge, modes, dashboard, quit).
 **Behaviors to know**
 - Maintain mode doesn't "only stop charging"; it **cuts adapter input**. While blocked, the whole Mac runs on battery, so heavy work drains it faster. Shallow cycling between 57% and 60% puts very little stress on the battery.
 - **Adapter blocking is always released right before sleep and when the app quits.** While asleep or with the app off, macOS charges normally and may go above the maintain level; once the app runs again it comes back down.
-- In clamshell mode, **when the displays turn off, it switches back to AC power** so a keyboard or mouse can wake the Mac. It may charge a little while you're away.
+- When the displays turn off in clamshell mode: **with Input Monitoring allowed**, the adapter stays blocked and the battery holds near 60%; keyboard or mouse input switches to AC and turns the display on. **Without it**, the app switches to AC right away to guarantee waking, so while you're away it charges up to the macOS limit (e.g. 80%) and then drains back to 60%. Allow the permission to avoid that round trip.
 - With auto work mode on and power connected, **system sleep is blocked even with the lid open**. The display still turns off as usual.
 - Bluetooth wake only works while the system is awake (auto work mode). If the Mac is fully asleep, wake it with USB input or by opening the lid.
 - **Update or restart the app with the lid open** to be safe. On quit the app releases adapter blocking and waits for AC power before restoring sleep, but if the Mac ends up on battery with the lid closed, macOS sleeps immediately and an external keyboard or mouse can't wake it.
