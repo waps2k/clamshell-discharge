@@ -83,7 +83,7 @@ if [[ ! -x "$BATTERY_BIN" ]]; then
 	exit 1
 fi
 
-if ! sudo -n -l "$PMSET" -a disablesleep 1 >/dev/null 2>&1; then
+if [[ ! -e /etc/sudoers.d/clamshell-discharge ]]; then
 	log "❌ 권한 설정이 필요합니다 (/etc/sudoers.d/clamshell-discharge). 메뉴 막대 앱의 '권한 설정'을 먼저 실행하세요."
 	exit 1
 fi
@@ -127,7 +127,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 0' INT TERM HUP
 
-set_sleep_disabled 1 && log "클램쉘 잠자기 차단 (disablesleep=1)"
+if set_sleep_disabled 1; then
+	log "클램쉘 잠자기 차단 (disablesleep=1)"
+else
+	log "❌ 잠자기 차단 실패 (권한 설정을 다시 하세요) — 방전하지 않고 종료"
+	exit 1
+fi
 
 caffeinate -dimu &
 CAF_PID=$!

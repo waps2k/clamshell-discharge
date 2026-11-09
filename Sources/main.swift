@@ -1,26 +1,14 @@
-// ClamshellDischarge — 메뉴 막대에서 클램쉘 능동 방전을 시작/중지
-// 실제 작업은 번들된 clamshell-discharge 스크립트가 하고, 이 앱은 시작/중지/상태 표시만 담당.
+// ClamshellDischarge — 메뉴 막대 앱
+// - 수동 방전: 번들된 clamshell-discharge 스크립트 실행
+// - 자동 업무 모드: 전원 연결 시 덮개 닫아도 동작, 배터리면 잠자기
+// - 충전 유지 / 퇴근 충전 / 대시보드: Engine.swift, Dashboard.swift
 
 import Cocoa
 import ServiceManagement
 
-let home = FileManager.default.homeDirectoryForCurrentUser.path
 let logPath = "\(home)/.battery/clamshell-discharge.log"
 let sudoersPath = "/etc/sudoers.d/clamshell-discharge"
 let targets = [90, 85, 80, 75, 70, 60, 50]
-
-func sh(_ cmd: String) -> (Int32, String) {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/bin/bash")
-    p.arguments = ["-c", cmd]
-    let pipe = Pipe()
-    p.standardOutput = pipe
-    p.standardError = pipe
-    do { try p.run() } catch { return (-1, "") }
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    p.waitUntilExit()
-    return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
-}
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -30,9 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var timer: Timer?
     var autoTimer: Timer?
     var lastAutoAction = ""
+    let engine = Engine.shared
+    let settings = Settings.shared
     var autoMode: Bool {
-        get { UserDefaults.standard.bool(forKey: "autoMode") }
-        set { UserDefaults.standard.set(newValue, forKey: "autoMode") }
+        get { settings.autoMode }
+        set { settings.autoMode = newValue }
     }
 
     var scriptPath: String {
@@ -45,6 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshIcon()
         timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.refreshIcon() }
         autoTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.autoTick() }
+        engine.manualDischarge = { [weak self] in
+            guard let self else { return false }
+            return self.isRunning || self.externalRunning
+        }
+        engine.start()
         // 이전에 비정상 종료돼 잠자기 차단이 남아 있으면 복구
         if !isRunning && !externalRunning && FileManager.default.fileExists(atPath: "\(home)/.battery/clamshell-discharge.sleepdisabled") {
             _ = sh("'\(scriptPath)' --restore >> '\(logPath)' 2>&1")
@@ -56,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             p.terminate()
             p.waitUntilExit()
         }
+        engine.shutdown()
         if autoMode && !externalRunning { _ = setSleepDisabled(false) }
     }
 
@@ -133,8 +129,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         !isRunning && sh("pgrep -f 'clamshell-discharge [0-9]'").0 == 0
     }
 
+    /// sudo -n -l 은 시스템 설정에 따라 실제로는 비밀번호가 필요한데도 통과하는 경우가 있어 파일 존재로 확인
     var permissionReady: Bool {
-        sh("sudo -n -l /usr/bin/pmset -a disablesleep 1").0 == 0
+        FileManager.default.fileExists(atPath: sudoersPath)
     }
 
     var batteryInstalled: Bool {
@@ -160,7 +157,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         img?.isTemplate = true
         b.image = img
         b.imagePosition = .imageLeft
-        b.title = running ? (target.map { " →\($0)%" } ?? " ↓") : ""
+        if running {
+            b.title = target.map { " →\($0)%" } ?? " ↓"
+        } else if let t = engine.target, engine.mode == .maintain || engine.mode == .departure {
+            b.title = " \(engine.mode == .departure ? "⏰" : "⛵")\(t)%"
+        } else {
+            b.title = ""
+        }
     }
 
     // MARK: 메뉴
@@ -182,6 +185,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             s.isEnabled = false
             menu.addItem(s)
         }
+        let b = engine.snapshot
+        let modeLine = NSMenuItem(title: "\(engine.mode.rawValue)\(engine.target.map { " · 목표 \($0)%" } ?? "")\(engine.adapterBlocked ? " · 어댑터 차단" : "") · SOH \(String(format: "%.1f", b.soh))%", action: nil, keyEquivalent: "")
+        modeLine.isEnabled = false
+        menu.addItem(modeLine)
+        menu.addItem(withTitle: "배터리 대시보드…", action: #selector(openDashboard), keyEquivalent: "d").target = self
+        menu.addItem(.separator())
+
+        let maintain = NSMenuItem(title: "충전 유지 모드 (\(settings.maintainLevel)%)", action: #selector(toggleMaintain), keyEquivalent: "")
+        maintain.target = self
+        maintain.state = settings.maintainEnabled ? .on : .off
+        menu.addItem(maintain)
+        let dep = NSMenuItem(title: "퇴근 충전 (\(settings.departureTimeText) 까지 \(settings.departureTarget)%)", action: #selector(toggleDeparture), keyEquivalent: "")
+        dep.target = self
+        dep.state = settings.departureEnabled ? .on : .off
+        menu.addItem(dep)
         menu.addItem(.separator())
 
         if !batteryInstalled {
@@ -312,6 +330,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             notify("로그인 항목 설정 실패: \(error.localizedDescription)")
         }
+    }
+
+    @objc func openDashboard() { DashboardWindow.show() }
+
+    @objc func toggleMaintain() {
+        settings.maintainEnabled.toggle()
+        if settings.maintainEnabled { autoMode = true }
+        engine.tick(); refreshIcon()
+    }
+
+    @objc func toggleDeparture() {
+        settings.departureEnabled.toggle()
+        engine.tick(); refreshIcon()
     }
 
     @objc func quit() {

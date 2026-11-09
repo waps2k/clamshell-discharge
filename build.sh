@@ -12,8 +12,8 @@ APP=build/ClamshellDischarge.app
 rm -rf build
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-swiftc -O -target arm64-apple-macos13 main.swift -o "$APP/Contents/MacOS/ClamshellDischarge" \
-	-framework Cocoa -framework ServiceManagement
+swiftc -O -target arm64-apple-macos13 Sources/*.swift -o "$APP/Contents/MacOS/ClamshellDischarge" \
+	-framework Cocoa -framework ServiceManagement -framework SwiftUI -framework Charts
 
 install -m 755 scripts/clamshell-discharge "$APP/Contents/Resources/clamshell-discharge"
 

@@ -1,0 +1,116 @@
+// 배터리 상태 읽기 + 어댑터(SMC CHIE) 제어 + 공용 유틸
+
+import Cocoa
+
+let home = FileManager.default.homeDirectoryForCurrentUser.path
+let smcPath = "/usr/local/co.palokaj.battery/smc"
+
+@discardableResult
+func sh(_ cmd: String) -> (Int32, String) {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/bash")
+    p.arguments = ["-c", cmd]
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    p.standardError = pipe
+    do { try p.run() } catch { return (-1, "") }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+}
+
+struct BatterySnapshot {
+    var date = Date()
+    var percent = 0            // 표시 충전량 (%)
+    var rawCurrent = 0         // mAh
+    var rawMax = 0             // 현재 최대 용량 (mAh)
+    var design = 0             // 설계 용량 (mAh)
+    var cycles = 0
+    var designCycles = 1000
+    var isCharging = false
+    var externalConnected = false  // macOS 가 어댑터 전원을 쓰는 중인지 (방전 중엔 No)
+    var adapterWatts = 0           // 어댑터가 물리적으로 꽂혀 있으면 > 0
+    var voltage = 0                // mV
+    var amperage = 0               // mA (+충전 / -방전)
+    var temperature: Double?       // °C
+
+    /// State of Health: 현재 최대 용량 / 설계 용량
+    var soh: Double { design > 0 ? Double(rawMax) / Double(design) * 100 : 0 }
+    var plugged: Bool { adapterWatts > 0 || externalConnected }
+}
+
+enum Battery {
+    static func read() -> BatterySnapshot? {
+        let out = sh("ioreg -rn AppleSmartBattery").1
+        guard !out.isEmpty else { return nil }
+
+        func int(_ key: String) -> Int? {
+            guard let r = out.range(of: "\"\(key)\" ?= ?(-?[0-9]+)", options: .regularExpression) else { return nil }
+            let s = out[r]
+            guard let n = s.range(of: "-?[0-9]+$", options: .regularExpression) else { return nil }
+            let txt = String(s[n])
+            if let v = Int(txt) { return v }
+            if let u = UInt64(txt) { return Int(Int64(bitPattern: u)) } // 음수가 unsigned 64비트로 보고되는 경우
+            return nil
+        }
+        func bool(_ key: String) -> Bool {
+            out.range(of: "\"\(key)\" = Yes") != nil
+        }
+
+        var b = BatterySnapshot()
+        b.percent = int("CurrentCapacity") ?? 0
+        b.rawCurrent = int("AppleRawCurrentCapacity") ?? 0
+        b.rawMax = int("AppleRawMaxCapacity") ?? 0
+        b.design = int("DesignCapacity") ?? 0
+        b.cycles = int("CycleCount") ?? 0
+        b.designCycles = int("DesignCycleCount9C") ?? 1000
+        b.isCharging = bool("IsCharging")
+        b.externalConnected = bool("ExternalConnected")
+        b.voltage = int("Voltage") ?? 0
+        b.amperage = int("InstantAmperage") ?? int("Amperage") ?? 0
+        if let t = int("Temperature") ?? int("VirtualTemperature"), t > 0 { b.temperature = Double(t) / 100 }
+        if let r = out.range(of: "\"AdapterDetails\" = \\{[^}]*\\}", options: .regularExpression) {
+            let s = String(out[r])
+            if let w = s.range(of: "\"Watts\"=[0-9]+", options: .regularExpression) {
+                b.adapterWatts = Int(s[w].split(separator: "=").last ?? "0") ?? 0
+            }
+        }
+        return b
+    }
+
+    /// macOS 가 보고하는 배터리 상태 문자열 (예: "Normal", "Service Recommended") — 느리므로 가끔만 호출
+    static func condition() -> String {
+        let out = sh("system_profiler SPPowerDataType 2>/dev/null | grep -m1 'Condition:'").1
+        return out.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "?"
+    }
+
+    static func lidClosed() -> Bool {
+        sh(#"ioreg -r -k AppleClamshellState -d 4 | grep -q '"AppleClamshellState" = Yes'"#).0 == 0
+    }
+
+    static func externalDisplayCount() -> Int {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var n: UInt32 = 0
+        guard CGGetOnlineDisplayList(16, &ids, &n) == .success else { return 0 }
+        return ids.prefix(Int(n)).filter { CGDisplayIsBuiltin($0) == 0 && CGDisplayMirrorsDisplay($0) == kCGNullDirectDisplay }.count
+    }
+}
+
+/// 어댑터 입력 차단(SMC CHIE). 차단하면 꽂힌 채로 배터리를 사용 = 충전도 멈춤.
+/// battery CLI 의 sudoers 규칙이 이 두 쓰기를 비밀번호 없이 허용함.
+enum Adapter {
+    static var available: Bool {
+        FileManager.default.isExecutableFile(atPath: smcPath)
+            && sh("sudo -n -l \(smcPath) -k CHIE -w 08").0 == 0
+    }
+
+    static func isBlocked() -> Bool {
+        let out = sh("\(smcPath) -k CHIE -r").1
+        return out.contains("bytes 08")
+    }
+
+    @discardableResult
+    static func setBlocked(_ blocked: Bool) -> Bool {
+        sh("sudo -n \(smcPath) -k CHIE -w \(blocked ? "08" : "00")").0 == 0
+    }
+}
