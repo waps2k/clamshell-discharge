@@ -1,0 +1,61 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    paths: ["windows/**", "tools/gen_l10n_cs.py", "Sources/L10n.swift", ".github/workflows/windows.yml"]
+    tags: ["win-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Check generated translations are up to date
+        shell: bash
+        run: |
+          python tools/gen_l10n_cs.py
+          git diff --exit-code -- windows/L10n.Generated.cs
+
+      - name: Publish single-file exe
+        run: dotnet publish windows/ClamshellDischarge.csproj -c Release -o out
+
+      - name: Self-test (no UI)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath out\ClamshellDischarge.exe -ArgumentList "--selftest","selftest.txt" -Wait -PassThru
+          Get-Content selftest.txt
+          if ($p.ExitCode -ne 0) { throw "selftest exit code $($p.ExitCode)" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path out\ClamshellDischarge.exe -DestinationPath ClamshellDischarge-Windows.zip
+          (Get-FileHash ClamshellDischarge-Windows.zip -Algorithm SHA256).Hash.ToLower() + "  ClamshellDischarge-Windows.zip" | Out-File -Encoding ascii ClamshellDischarge-Windows.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClamshellDischarge-Windows
+          path: |
+            ClamshellDischarge-Windows.zip
+            ClamshellDischarge-Windows.zip.sha256
+            selftest.txt
+
+      - name: Release (tag win-v*)
+        if: startsWith(github.ref, 'refs/tags/win-v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" ClamshellDischarge-Windows.zip ClamshellDischarge-Windows.zip.sha256 \
+            --title "Clamshell Discharge for Windows ${GITHUB_REF_NAME#win-v} (preview)" --prerelease \
+            --notes "Windows 11 미리보기 판. 현재 Lenovo(ThinkPad 충전 임계값, IdeaPad/Yoga/Legion 보존 모드)만 충전 제어를 지원합니다. 자세한 내용은 windows/README.md 참고."
