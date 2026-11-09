@@ -16,6 +16,7 @@ swiftc -O -target arm64-apple-macos13 Sources/*.swift -o "$APP/Contents/MacOS/Cl
 	-framework Cocoa -framework ServiceManagement -framework SwiftUI -framework Charts
 
 install -m 755 scripts/clamshell-discharge "$APP/Contents/Resources/clamshell-discharge"
+install -m 644 icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -31,6 +32,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
 	<key>LSMinimumSystemVersion</key><string>13.0</string>
 	<key>LSUIElement</key><true/>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>NSHumanReadableCopyright</key><string>MIT License</string>
 </dict>
 </plist>
