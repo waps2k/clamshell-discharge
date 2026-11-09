@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             return self.isRunning || self.externalRunning
         }
         engine.start()
+        if CommandLine.arguments.contains("--show-dashboard") { // 디버그/스크린샷: 대시보드 열기
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { DashboardWindow.show() }
+        }
         if CommandLine.arguments.contains("--show-popover") { // 디버그: 실행하자마자 팝오버 열기
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.showPopover() }
         }

@@ -369,7 +369,7 @@ struct PopoverView: View {
                 Text(tr("클램쉘 잠자기 제어(수동 방전·자동 업무 모드)에 필요합니다.")).font(.caption2).foregroundStyle(.secondary)
             }
         }
-        .toggleStyle(.switch)
+        .toggleStyle(ColorSwitchStyle())
         .controlSize(.small)
     }
 
@@ -556,5 +556,33 @@ struct PopoverView: View {
             Text(v).foregroundStyle(tint).monospacedDigit()
         }
         .font(.callout)
+    }
+}
+
+/// 창이 활성/비활성이어도 켜짐 상태가 분명히 보이는 스위치
+/// (메뉴 막대 팝오버는 비활성으로 그려질 때가 많아 기본 스위치가 회색으로 보임)
+struct ColorSwitchStyle: ToggleStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            configuration.label
+            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                Capsule()
+                    .fill(configuration.isOn ? Color.accentColor : Color.secondary.opacity(0.28))
+                    .frame(width: 34, height: 20)
+                Circle()
+                    .fill(.white)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+                    .frame(width: 16, height: 16)
+                    .padding(2)
+            }
+            .opacity(isEnabled ? 1 : 0.45)
+            .animation(.easeInOut(duration: 0.15), value: configuration.isOn)
+            .onTapGesture { if isEnabled { configuration.isOn.toggle() } }
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(configuration.isOn ? "on" : "off")
+        }
     }
 }
