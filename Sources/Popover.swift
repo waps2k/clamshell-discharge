@@ -107,40 +107,40 @@ struct PopoverView: View {
     @ObservedObject var engine = Engine.shared
     @ObservedObject var settings = Settings.shared
     let actions: AppActions
-    var height: CGFloat = 640
     @State private var tick = 0 // 메뉴 상태(로그인 항목 등) 재계산용
+
+    static let columnWidth: CGFloat = 300
 
     var body: some View {
         let b = engine.snapshot
         let st = engine.chargeState
         VStack(spacing: 0) {
-            // 헤더는 고정, 나머지는 스크롤
-            header(b, st)
-                .padding(.top, 18)
-                .padding(.bottom, 10)
-                .frame(maxWidth: .infinity)
-            Divider()
-            ScrollViewReader { proxy in
-            ScrollView {
+            // 스크롤 없이 한 화면: 왼쪽 = 상태, 오른쪽 = 제어
+            HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 12) {
-                    Color.clear.frame(height: 0).id("top")
+                    header(b, st)
                     section("사용 기록") { usageHistory }
                     section("세부 사항") { details(b, st) }
-                    section("모드") { controls }
                     section("배터리") { batteryDetails(b) }
-                    section("상위 프로세스") { processes }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .frame(width: Self.columnWidth)
+                Divider()
+                VStack(spacing: 12) {
+                    section("모드") { controls }
+                    Spacer(minLength: 0)
+                }
+                .frame(width: Self.columnWidth)
             }
-            .onAppear { proxy.scrollTo("top", anchor: .top) }
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
             Divider()
             footer
                 .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.vertical, 7)
         }
-        .frame(width: 340, height: height)
+        .frame(width: Self.columnWidth * 2 + 16 + 32 + 1)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: 헤더
@@ -148,9 +148,9 @@ struct PopoverView: View {
     func header(_ b: BatterySnapshot, _ st: ChargeState) -> some View {
         VStack(spacing: 8) {
             HStack(spacing: 16) {
-                BatteryGlyph(percent: b.percent, state: st, width: 120)
+                BatteryGlyph(percent: b.percent, state: st, width: 104)
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text("\(b.percent)").font(.system(size: 42, weight: .bold, design: .rounded))
+                    Text("\(b.percent)").font(.system(size: 38, weight: .bold, design: .rounded))
                     Text("%").font(.title3).foregroundStyle(.secondary)
                 }
             }
@@ -207,8 +207,8 @@ struct PopoverView: View {
                     }
                 }
             }
-            .frame(height: 90)
-            .padding(8)
+            .frame(height: 64)
+            .padding(6)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.06)))
             HStack(spacing: 10) {
                 legend(.green, "충전")
@@ -253,13 +253,18 @@ struct PopoverView: View {
         VStack(spacing: 6) {
             CapacityBar(current: b.rawCurrent, max: b.rawMax, design: b.design)
                 .padding(.bottom, 6)
-            if let w = b.systemWatts { row("어댑터 입력", String(format: "%.2f W", w)) }
-            row("배터리 전력", String(format: "%+.2f W", b.batteryWatts))
-            row("전류", "\(b.amperage) mA")
-            row("전압", String(format: "%.2f V", Double(b.voltage) / 1000))
-            row("사이클", "\(b.cycles) / \(b.designCycles)")
-            if let t = b.temperature {
-                row("온도", String(format: "%.1f°C", t), tint: t >= 40 ? .orange : .primary)
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 5) {
+                    row("어댑터", b.systemWatts.map { String(format: "%.1f W", $0) } ?? "-")
+                    row("전류", "\(b.amperage) mA")
+                    row("사이클", "\(b.cycles)")
+                }
+                VStack(spacing: 5) {
+                    row("배터리", String(format: "%+.1f W", b.batteryWatts))
+                    row("전압", String(format: "%.2f V", Double(b.voltage) / 1000))
+                    row("온도", b.temperature.map { String(format: "%.1f°C", $0) } ?? "-",
+                        tint: (b.temperature ?? 0) >= 40 ? .orange : .primary)
+                }
             }
             row("macOS 판정", engine.condition)
         }
@@ -500,26 +505,6 @@ struct PopoverView: View {
                 .background(Capsule().fill(selected ? Color.accentColor : Color.secondary.opacity(0.15)))
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: 상위 프로세스
-
-    var processes: some View {
-        VStack(spacing: 5) {
-            HStack {
-                Text("프로세스"); Spacer(); Text("CPU")
-            }
-            .font(.caption).foregroundStyle(.secondary)
-            ForEach(engine.processes) { p in
-                HStack {
-                    Circle().fill(p.cpu >= 50 ? Color.orange : Color.secondary.opacity(0.5)).frame(width: 7, height: 7)
-                    Text(p.name).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Text(String(format: "%.1f%%", p.cpu)).monospacedDigit()
-                }
-                .font(.callout)
-            }
-        }
     }
 
     // MARK: 하단

@@ -123,7 +123,6 @@ final class Engine: ObservableObject {
     @Published var adapterBlocked = Adapter.isBlocked()
     @Published var condition = "…"
     @Published var nextDeparture: Date?
-    @Published var processes: [ProcessUsage] = []
     /// 수동 방전 상태 (AppDelegate 타이머가 갱신; 뷰는 이 값만 읽음)
     @Published var manualRunning = false
     @Published var manualTarget: Int?
@@ -133,8 +132,6 @@ final class Engine: ObservableObject {
     func refreshLive() {
         if let b = Battery.read() { snapshot = b }
         adapterBlocked = Adapter.isBlocked()
-        let p = Processes.top()
-        processes = p
     }
 
     /// 수동 방전 스크립트가 도는 중인지 (AppDelegate 가 알려줌)

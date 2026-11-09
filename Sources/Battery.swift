@@ -153,27 +153,3 @@ enum SMC {
         return v.isFinite ? v : nil
     }
 }
-
-struct ProcessUsage: Identifiable {
-    let name: String
-    let cpu: Double
-    var id: String { name }
-}
-
-enum Processes {
-    /// CPU 사용량 상위 프로세스 (이름이 같은 건 합산)
-    static func top(_ n: Int = 6) -> [ProcessUsage] {
-        let out = sh("ps -Aceo pcpu=,comm= -r | head -40").1
-        var sum: [String: Double] = [:]
-        var order: [String] = []
-        for line in out.split(separator: "\n") {
-            let t = line.trimmingCharacters(in: .whitespaces)
-            guard let sp = t.firstIndex(of: " "), let v = Double(t[..<sp]) else { continue }
-            let name = t[sp...].trimmingCharacters(in: .whitespaces)
-            if sum[name] == nil { order.append(name) }
-            sum[name, default: 0] += v
-        }
-        return order.map { ProcessUsage(name: $0, cpu: sum[$0]!) }
-            .sorted { $0.cpu > $1.cpu }.prefix(n).map { $0 }
-    }
-}

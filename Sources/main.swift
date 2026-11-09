@@ -219,16 +219,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
     func showPopover() {
         guard let b = item.button else { return }
         engine.refreshLive()
-        // 메뉴 막대가 있는 화면 높이에 맞춰 크기 결정 (작은 화면에서 위가 잘리지 않게)
-        let screenH = b.window?.screen?.visibleFrame.height ?? 800
-        let h = max(420, min(640, screenH - 40))
-        let host = NSHostingController(rootView: PopoverView(actions: makeActions(), height: h))
-        if #available(macOS 13.0, *) { host.sizingOptions = [] }
-        host.view.frame = NSRect(x: 0, y: 0, width: 340, height: h)
-        popover.contentViewController = host
-        popover.contentSize = NSSize(width: 340, height: h)
-        // makeKey 를 하면 첫 스위치에 포커스가 가면서 스크롤이 중간으로 내려가므로 하지 않음
+        // 내용 크기에 맞춰 팝오버 크기가 정해지고, 편집 칸을 펼치면 함께 늘어남 (스크롤 없음)
+        if popover.contentViewController == nil {
+            let host = NSHostingController(rootView: PopoverView(actions: makeActions()))
+            if #available(macOS 13.0, *) { host.sizingOptions = [.preferredContentSize] }
+            popover.contentViewController = host
+        }
+        NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
+        // 활성 창이어야 스위치가 강조색으로 보임. 첫 컨트롤에 포커스 테두리는 생기지 않게 비움.
+        if let w = popover.contentViewController?.view.window {
+            w.makeKey()
+            DispatchQueue.main.async { w.makeFirstResponder(nil) }
+        }
     }
 
     func popoverWillShow(_ notification: Notification) {
