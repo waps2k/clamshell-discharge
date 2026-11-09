@@ -1,5 +1,7 @@
 # Clamshell Discharge
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-후원하기-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/waps99)
+
 Apple Silicon MacBook을 **덮개를 닫은 채(클램쉘) 외장 모니터에 연결해 쓰는 사람**을 위한 배터리 관리 메뉴 막대 앱입니다.
 
 - 전원을 꽂아 둔 동안 배터리를 **60% 근처로 유지**해서 노화를 늦춥니다.
@@ -275,6 +277,14 @@ sudo pmset -a disablesleep 0
 ```
 
 그 밖에 **시스템 설정 → 개인정보 보호 및 보안 → 입력 모니터링**과 **일반 → 로그인 항목**에서 ClamshellDischarge를 지웁니다. battery CLI도 지우려면 [battery 저장소](https://github.com/actuallymentor/battery)의 제거 방법을 따릅니다.
+
+## 후원하기
+
+이 앱이 배터리 수명을 지키는 데 도움이 됐다면 커피 한 잔으로 응원해 주세요. ☕
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-후원하기-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/waps99)
+
+앱의 ⚙︎ 메뉴 → **후원하기**에서도 열 수 있습니다. 후원은 선택이며, 모든 기능은 무료입니다.
 
 ## 라이선스
 

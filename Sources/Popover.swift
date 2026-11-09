@@ -614,6 +614,7 @@ struct PopoverView: View {
                     }
                 }
                 Divider()
+                Button("☕ " + tr("후원하기")) { NSWorkspace.shared.open(donateURL) }
                 Button(tr("로그 보기")) { actions.openLog() }
                 Toggle(tr("로그인 시 자동 실행"), isOn: Binding(get: { actions.loginEnabled() }, set: { _ in actions.toggleLogin(); tick += 1 }))
                 Divider()

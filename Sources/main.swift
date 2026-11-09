@@ -360,6 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
 
         menu.addItem(.separator())
         menu.addItem(withTitle: tr("로그 보기"), action: #selector(openLog), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "☕ " + tr("후원하기"), action: #selector(openDonate), keyEquivalent: "").target = self
 
         let login = NSMenuItem(title: tr("로그인 시 자동 실행"), action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
@@ -476,6 +477,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
     }
 
     @objc func openDashboard() { DashboardWindow.show() }
+
+    @objc func openDonate() { NSWorkspace.shared.open(donateURL) }
 
     @objc func toggleMaintain() {
         settings.maintainEnabled.toggle()

@@ -338,7 +338,8 @@ public sealed class PopupWindow : Window
             try { Clipboard.SetText(E.Diagnostics()); MessageBox.Show(L10n.Tr("진단 정보를 클립보드에 복사했습니다."), "Clamshell Discharge"); } catch { }
         });
         var ver = Ui.Text("v" + (typeof(PopupWindow).Assembly.GetName().Version?.ToString(3) ?? ""), 11, Theme.Secondary);
-        var bar = Ui.Spread(Ui.H(10, lang, login), Ui.H(10, ver, diag, Ui.Button(L10n.Tr("종료"), quit)));
+        var donate = Ui.Button("☕ " + L10n.Tr("후원하기"), Program.OpenDonate);
+        var bar = Ui.Spread(Ui.H(10, lang, login), Ui.H(10, ver, donate, diag, Ui.Button(L10n.Tr("종료"), quit)));
         bar.Margin = new Thickness(16, 8, 16, 8);
         return bar;
     }

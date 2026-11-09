@@ -49,6 +49,7 @@ public static partial class L10n
         ["%@시간 후"] = new[] { "In %@ h", "%@時間後", "%@ 小时后" },
         ["%@ 출발 · %@부터 충전"] = new[] { "Leaving %@ · charging from %@", "%@出発 · %@から充電", "%@ 出发 · %@ 开始充电" },
         ["지금 충전 예약 · %@부터"] = new[] { "Charge now scheduled · from %@", "今すぐ充電を予約 · %@から", "已预约立即充电 · %@ 开始" },
+        ["후원하기"] = new[] { "Support on Ko-fi", "Ko-fiで支援する", "在 Ko-fi 上赞助" },
         ["사용 기록"] = new[] { "Usage history", "使用履歴", "使用记录" },
         ["세부 사항"] = new[] { "Details", "詳細", "详情" },
         ["배터리"] = new[] { "Battery", "バッテリー", "电池" },

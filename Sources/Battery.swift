@@ -4,6 +4,7 @@ import Cocoa
 
 let home = FileManager.default.homeDirectoryForCurrentUser.path
 let smcPath = "/usr/local/co.palokaj.battery/smc"
+let donateURL = URL(string: "https://ko-fi.com/waps99")!
 
 @discardableResult
 func sh(_ cmd: String) -> (Int32, String) {

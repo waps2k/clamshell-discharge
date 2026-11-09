@@ -88,11 +88,19 @@ public static class Program
             m.Items.Clear();
             m.Items.Add(L10n.Tr("열기"), null, (_, _) => popup?.ShowNearTray());
             m.Items.Add(L10n.Tr("배터리 대시보드…"), null, (_, _) => OpenDashboard());
+            m.Items.Add("☕ " + L10n.Tr("후원하기"), null, (_, _) => OpenDonate());
             m.Items.Add(new Forms.ToolStripSeparator());
             m.Items.Add(L10n.Tr("종료"), null, (_, _) => Quit());
         };
         m.Items.Add("…");
         return m;
+    }
+
+    public const string DonateUrl = "https://ko-fi.com/waps99";
+
+    public static void OpenDonate()
+    {
+        try { Process.Start(new ProcessStartInfo(DonateUrl) { UseShellExecute = true }); } catch { }
     }
 
     static void OpenDashboard()

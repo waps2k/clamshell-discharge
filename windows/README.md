@@ -56,6 +56,10 @@ dotnet publish -c Release -o publish     # publish/ClamshellDischarge.exe (단�
 - 번역 표는 macOS 판 `Sources/L10n.swift`에서 만듭니다: `python3 tools/gen_l10n_cs.py`. Windows 전용 문구는 `windows/L10n.cs`의 `Extra` 표에 있습니다.
 - GitHub Actions(`.github/workflows/windows.yml`)가 Windows에서 빌드하고 `--selftest`로 기본 동작을 점검합니다. `win-v*` 태그를 push하면 미리보기 릴리스를 만듭니다.
 
+## 후원하기
+
+[Ko-fi](https://ko-fi.com/waps99)에서 응원해 주실 수 있습니다. 앱 아래쪽 **☕ 후원하기** 버튼으로도 열 수 있습니다.
+
 ## 출처
 
 - ThinkPad 임계값 프로토콜: [wesmar/lbm](https://github.com/wesmar/lbm) (MIT) README의 Implementation 절
