@@ -198,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         b.imagePosition = .imageLeft
         var title = " \(snap.percent)%"
         if (isRunning || externalRunning), let t = currentDischargeTarget() { title += "→\(t)" }
-        else if engine.mode == .departure || engine.mode == .commute { title += "⏰" }
+        else if [.departure, .commute, .weekend].contains(engine.mode) { title += "⏰" }
         else if engine.mode == .oneShot { title += "🧳" }
         b.title = title
         b.toolTip = "\(st.label)\(engine.target.map { tr(" · 목표 \($0)%") } ?? "")"
@@ -305,10 +305,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         com.target = self
         com.state = settings.commuteEnabled ? .on : .off
         menu.addItem(com)
+        let wk = NSMenuItem(title: tr("주말 외출 충전 (\(settings.schedule(.weekend).timeText) 까지 \(settings.weekendTarget)%)"), action: #selector(toggleWeekend), keyEquivalent: "")
+        wk.target = self
+        wk.state = settings.weekendEnabled ? .on : .off
         let dep = NSMenuItem(title: tr("퇴근 충전 (\(settings.departureTimeText) 까지 \(settings.departureTarget)%)"), action: #selector(toggleDeparture), keyEquivalent: "")
         dep.target = self
         dep.state = settings.departureEnabled ? .on : .off
         menu.addItem(dep)
+        menu.addItem(wk)
         menu.addItem(.separator())
 
         if !batteryInstalled {
@@ -476,6 +480,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
     @objc func toggleMaintain() {
         settings.maintainEnabled.toggle()
         if settings.maintainEnabled { autoMode = true }
+        engine.tick(); refreshIcon()
+    }
+
+    @objc func toggleWeekend() {
+        settings.weekendEnabled.toggle()
         engine.tick(); refreshIcon()
     }
 

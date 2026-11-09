@@ -37,6 +37,16 @@ public sealed class AppSettings
     public int CommuteLead { get; set; } = 90;
     public List<int> CommuteWeekdays { get; set; } = new() { 1, 2, 3, 4, 5 };
 
+    // 주말 외출 충전 (출근과 시각이 다른 주말용)
+    public bool WeekendEnabled { get; set; } = false;
+    public int WeekendMinutes { get; set; } = 10 * 60;
+    public int WeekendTarget { get; set; } = 80;
+    public int WeekendLead { get; set; } = 60;
+    public List<int> WeekendWeekdays { get; set; } = new() { 6, 0 };
+
+    /// <summary>지금 충전 출발 시각. null 이면 바로 충전, 미래면 그 시각에 맞춰 늦게 시작</summary>
+    public DateTime? OneShotDepartAt { get; set; }
+
     // 지금 충전 (출장·외출): 0 = 꺼짐. 목표 도달 후 어댑터를 뽑거나 24시간이 지나면 해제
     public int OneShotTarget { get; set; } = 0;
     public DateTime OneShotSince { get; set; } = DateTime.MinValue;
@@ -52,20 +62,32 @@ public sealed class AppSettings
 
     public string DepartureTimeText => $"{DepartureMinutes / 60:00}:{DepartureMinutes % 60:00}";
 
-    public ScheduleValues Schedule(ScheduleKind k) => k == ScheduleKind.Commute
-        ? new ScheduleValues(CommuteEnabled, CommuteMinutes, CommuteTarget, CommuteLead, CommuteWeekdays)
-        : new ScheduleValues(DepartureEnabled, DepartureMinutes, DepartureTarget, DepartureLead, DepartureWeekdays);
+    public ScheduleValues Schedule(ScheduleKind k) => k switch
+    {
+        ScheduleKind.Commute => new ScheduleValues(CommuteEnabled, CommuteMinutes, CommuteTarget, CommuteLead, CommuteWeekdays),
+        ScheduleKind.Weekend => new ScheduleValues(WeekendEnabled, WeekendMinutes, WeekendTarget, WeekendLead, WeekendWeekdays),
+        _ => new ScheduleValues(DepartureEnabled, DepartureMinutes, DepartureTarget, DepartureLead, DepartureWeekdays),
+    };
 
     public void UpdateSchedule(ScheduleKind k, Func<ScheduleValues, ScheduleValues> change) => Update(s =>
     {
         var v = change(s.Schedule(k));
         if (k == ScheduleKind.Commute)
         { s.CommuteEnabled = v.Enabled; s.CommuteMinutes = v.Minutes; s.CommuteTarget = v.Target; s.CommuteLead = v.Lead; s.CommuteWeekdays = v.Weekdays; }
+        else if (k == ScheduleKind.Weekend)
+        { s.WeekendEnabled = v.Enabled; s.WeekendMinutes = v.Minutes; s.WeekendTarget = v.Target; s.WeekendLead = v.Lead; s.WeekendWeekdays = v.Weekdays; }
         else
         { s.DepartureEnabled = v.Enabled; s.DepartureMinutes = v.Minutes; s.DepartureTarget = v.Target; s.DepartureLead = v.Lead; s.DepartureWeekdays = v.Weekdays; }
     });
 
-    public void StartOneShot(int target) => Update(s => { s.OneShotTarget = target; s.OneShotSince = DateTime.Now; });
+    /// <summary>target 까지 충전. hours 시간 뒤 출발이면 그 시각에 맞춰 늦게 시작 (0 = 바로)</summary>
+    public void StartOneShot(int target, double hours) => Update(s =>
+    {
+        s.OneShotTarget = target; s.OneShotSince = DateTime.Now;
+        s.OneShotDepartAt = hours > 0 ? DateTime.Now.AddHours(hours) : null;
+    });
+
+    public void SetOneShotDeparture(double hours) => Update(s => s.OneShotDepartAt = hours > 0 ? DateTime.Now.AddHours(hours) : null);
     public void CancelOneShot() => Update(s => s.OneShotTarget = 0);
 
     static AppSettings Load()
@@ -98,7 +120,7 @@ public sealed class AppSettings
     }
 }
 
-public enum ScheduleKind { Commute, Leave }
+public enum ScheduleKind { Commute, Leave, Weekend }
 
 public sealed record ScheduleValues(bool Enabled, int Minutes, int Target, int Lead, List<int> Weekdays)
 {
@@ -107,6 +129,24 @@ public sealed record ScheduleValues(bool Enabled, int Minutes, int Target, int L
 
 public static class ScheduleKindText
 {
-    public static string Title(this ScheduleKind k) => k == ScheduleKind.Commute ? L10n.Tr("출근 충전") : L10n.Tr("퇴근 충전");
-    public static string Short(this ScheduleKind k) => k == ScheduleKind.Commute ? L10n.Tr("출근") : L10n.Tr("퇴근");
+    public static readonly ScheduleKind[] All = { ScheduleKind.Commute, ScheduleKind.Leave, ScheduleKind.Weekend };
+
+    public static string Title(this ScheduleKind k) => k switch
+    {
+        ScheduleKind.Commute => L10n.Tr("출근 충전"), ScheduleKind.Weekend => L10n.Tr("주말 외출 충전"), _ => L10n.Tr("퇴근 충전"),
+    };
+    public static string Short(this ScheduleKind k) => k switch
+    {
+        ScheduleKind.Commute => L10n.Tr("출근"), ScheduleKind.Weekend => L10n.Tr("주말"), _ => L10n.Tr("퇴근"),
+    };
+    public static string NextLabel(this ScheduleKind k) => k switch
+    {
+        ScheduleKind.Commute => L10n.Tr("다음 출근 충전"), ScheduleKind.Weekend => L10n.Tr("다음 주말 외출 충전"), _ => L10n.Tr("다음 퇴근 충전"),
+    };
+    public static int[] Presets(this ScheduleKind k) => k switch
+    {
+        ScheduleKind.Commute => new[] { 6 * 60 + 30, 7 * 60, 7 * 60 + 30, 8 * 60, 8 * 60 + 30, 9 * 60, 9 * 60 + 30 },
+        ScheduleKind.Weekend => new[] { 8 * 60, 9 * 60, 10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60 },
+        _ => new[] { 16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60 },
+    };
 }

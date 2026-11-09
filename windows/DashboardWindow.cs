@@ -54,6 +54,7 @@ public sealed class DashboardWindow : Window
             Mode.Maintain => L10n.Tr("유지 모드"),
             Mode.Departure => L10n.Tr("퇴근 충전"),
             Mode.Commute => L10n.Tr("출근 충전"),
+            Mode.Weekend => L10n.Tr("주말 외출 충전"),
             Mode.OneShot => L10n.Tr("지금 충전"),
             Mode.Unavailable => L10n.Tr("지원 안 됨 (모니터링만)"),
             _ => L10n.Tr("일반 충전"),

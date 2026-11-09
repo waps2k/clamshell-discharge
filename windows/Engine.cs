@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 
 namespace ClamshellDischarge;
 
-public enum Mode { Off, Maintain, Departure, Commute, OneShot, Unavailable }
+public enum Mode { Off, Maintain, Departure, Commute, Weekend, OneShot, Unavailable }
 
 public sealed record Sample(DateTime Date, int Percent, double Soh, int Cycles, bool Limited, bool Charging);
 
@@ -26,6 +26,9 @@ public sealed class Engine
     public int? AppliedLimit { get; private set; }
     public DateTime? NextDeparture { get; private set; }
     public DateTime? NextCommute { get; private set; }
+    public Dictionary<ScheduleKind, DateTime> NextTimes { get; private set; } = new();
+    /// <summary>지금 충전을 출발 시각에 맞춰 늦게 시작할 때 충전 시작 시각</summary>
+    public DateTime? OneShotStartAt { get; private set; }
     public string LastError { get; private set; } = "";
 
     public event Action? Updated;
@@ -67,7 +70,7 @@ public sealed class Engine
     public ScheduleKind? ActiveSchedule(DateTime now)
     {
         ScheduleKind? best = null;
-        foreach (var k in new[] { ScheduleKind.Commute, ScheduleKind.Leave })
+        foreach (var k in ScheduleKindText.All)
             if (InWindow(k, now) && (best == null || S.Schedule(k).Target > S.Schedule(best.Value).Target)) best = k;
         return best;
     }
@@ -82,16 +85,17 @@ public sealed class Engine
         Snapshot = Battery.Read();
         NextDeparture = NextTime(ScheduleKind.Leave, now);
         NextCommute = NextTime(ScheduleKind.Commute, now);
+        NextTimes = ScheduleKindText.All.Select(k => (k, t: NextTime(k, now))).Where(x => x.t != null).ToDictionary(x => x.k, x => x.t!.Value);
         Record();
         UpdateOneShot();
 
         if (Controller.Kind == ControlKind.None) { Mode = Mode.Unavailable; Target = null; Updated?.Invoke(); return; }
 
         int? want = null;
-        if (S.OneShotTarget > 0) { Mode = Mode.OneShot; want = S.OneShotTarget; }
+        if (S.OneShotTarget > 0 && OneShotShouldCharge(now)) { Mode = Mode.OneShot; want = S.OneShotTarget; }
         else if (ActiveSchedule(now) is ScheduleKind k)
         {
-            Mode = k == ScheduleKind.Commute ? Mode.Commute : Mode.Departure;
+            Mode = k switch { ScheduleKind.Commute => Mode.Commute, ScheduleKind.Weekend => Mode.Weekend, _ => Mode.Departure };
             want = S.Schedule(k).Target;
         }
         else if (S.MaintainEnabled)
@@ -117,6 +121,44 @@ public sealed class Engine
 
     /// <summary>설정 변경 직후: 다음 Tick 에서 반드시 다시 적용</summary>
     public void Reapply() { lastApplied = -1; ApplyLid(); Tick(); }
+
+    // ── 지금 충전 시작 시각 계산 ──
+
+    /// <summary>기록에서 배운 충전 속도 (%/분, 80% 아래 구간). 기록이 부족하면 1.0</summary>
+    public double LearnedChargeRate()
+    {
+        var cutoff = DateTime.Now.AddDays(-14);
+        var s = Samples.Where(x => x.Date >= cutoff).ToList();
+        var rates = new List<double>();
+        for (int i = 1; i < s.Count; i++)
+        {
+            var a = s[i - 1]; var b = s[i];
+            if (!a.Charging || !b.Charging || b.Percent <= a.Percent || b.Percent > 80) continue;
+            var mins = (b.Date - a.Date).TotalMinutes;
+            if (mins > 0.5 && mins < 10) rates.Add((b.Percent - a.Percent) / mins);
+        }
+        if (rates.Count < 5) return 1.0;
+        rates.Sort();
+        return Math.Clamp(rates[rates.Count / 2], 0.3, 3.0);
+    }
+
+    /// <summary>from% → to% 대략적인 분. 80% 위는 느려지므로 절반 속도</summary>
+    public int EstimateMinutes(int from, int to)
+    {
+        if (to <= from) return 0;
+        double r = LearnedChargeRate(), m = 0;
+        for (int p = from; p < to; p++) m += p < 80 ? 1 / r : 2 / r;
+        return (int)Math.Ceiling(m);
+    }
+
+    /// <summary>출발 시각이 있으면 (출발 − 예상 충전 시간 − 여유 15분) 이후에만 충전</summary>
+    bool OneShotShouldCharge(DateTime now)
+    {
+        if (S.OneShotDepartAt is not DateTime dep || dep <= now) { OneShotStartAt = null; return true; }
+        var start = dep.AddMinutes(-(EstimateMinutes(Snapshot.Percent, S.OneShotTarget) + 15));
+        OneShotStartAt = start;
+        return now >= start;
+    }
 
     // 지금 충전 자동 해제: 목표에 닿은 뒤 어댑터를 뽑았거나(가지고 나감) 24시간이 지나면
     bool oneShotReached;

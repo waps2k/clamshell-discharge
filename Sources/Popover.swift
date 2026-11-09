@@ -108,7 +108,8 @@ struct PopoverView: View {
     @ObservedObject var settings = Settings.shared
     let actions: AppActions
     @State private var tick = 0
-    @State private var expanded: ScheduleKind? = nil  // 편집 칸을 펼친 일정 // 메뉴 상태(로그인 항목 등) 재계산용
+    @State private var expanded: ScheduleKind? = nil  // 편집 칸을 펼친 일정
+    @State private var departIn: Double = 0            // 지금 충전: 출발까지 시간 (0 = 바로) // 메뉴 상태(로그인 항목 등) 재계산용
 
     static let columnWidth: CGFloat = 300
 
@@ -163,11 +164,14 @@ struct PopoverView: View {
             .foregroundStyle(st.color)
             .padding(.horizontal, 12).padding(.vertical, 5)
             .background(Capsule().fill(st.color.opacity(0.14)))
-            if let t = engine.target, [.maintain, .departure, .commute, .oneShot].contains(engine.mode) {
+            if settings.oneShotTarget > 0, engine.mode != .oneShot, let start = engine.oneShotStartAt {
+                Text(tr("지금 충전 예약 · \(start.tTime)부터")).font(.caption).foregroundStyle(.secondary)
+            } else if let t = engine.target, [.maintain, .departure, .commute, .weekend, .oneShot].contains(engine.mode) {
                 Group {
                     switch engine.mode {
                     case .maintain: Text(tr("유지 모드 · \(t - settings.band)~\(t)%"))
                     case .commute: Text(tr("출근 충전 · 목표 \(t)%"))
+                    case .weekend: Text(tr("주말 외출 충전 · 목표 \(t)%"))
                     case .oneShot: Text(tr("지금 충전 · 목표 \(t)%"))
                     default: Text(tr("퇴근 충전 · 목표 \(t)%"))
                     }
@@ -249,11 +253,10 @@ struct PopoverView: View {
             default:
                 row(tr("남은 사용 시간"), b.timeToEmpty.map(fmtMinutes) ?? tr("계산 중"))
             }
-            if settings.commuteEnabled, let t = engine.nextCommute {
-                row(tr("다음 출근 충전"), "\(t.tTime) · \(settings.commuteTarget)%")
-            }
-            if settings.departureEnabled, let dep = engine.nextDeparture {
-                row(tr("다음 퇴근 충전"), "\(dep.tTime) · \(settings.departureTarget)%")
+            // 가장 가까운 일정 하나만 (여럿이면 화면이 길어짐)
+            if let (k, t) = engine.nextTimes.min(by: { $0.value < $1.value }) {
+                row(k == .commute ? tr("다음 출근 충전") : k == .weekend ? tr("다음 주말 외출 충전") : tr("다음 퇴근 충전"),
+                    "\(t.tWeekdayTime) · \(settings.schedule(k).target)%")
             }
         }
     }
@@ -452,9 +455,7 @@ struct PopoverView: View {
 
     func scheduleEditor(_ k: ScheduleKind) -> some View {
         let v = settings.schedule(k)
-        let presets = k == .commute
-            ? [6 * 60 + 30, 7 * 60, 7 * 60 + 30, 8 * 60, 8 * 60 + 30, 9 * 60, 9 * 60 + 30]
-            : [16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60]
+        let presets = k.presets
         return VStack(alignment: .leading, spacing: 9) {
             // 시각: −/+ 15분, 자주 쓰는 시각은 메뉴로
             HStack(spacing: 8) {
@@ -524,6 +525,13 @@ struct PopoverView: View {
 
     // MARK: 지금 충전 (출장·외출)
 
+    /// 켜져 있으면 실제 설정된 출발 시각 기준으로 선택 표시 (남은 시간을 반올림), 꺼져 있으면 고른 값
+    var shownDepartIn: Double {
+        guard settings.oneShotTarget > 0 else { return departIn }
+        guard let dep = settings.oneShotDeparture else { return 0 }
+        return min(3, max(1, (dep.timeIntervalSinceNow / 3600).rounded()))
+    }
+
     var oneShotRow: some View {
         let t = settings.oneShotTarget
         let b = engine.snapshot
@@ -532,12 +540,25 @@ struct PopoverView: View {
                 Image(systemName: "suitcase.rolling.fill").foregroundStyle(t > 0 ? Color.accentColor : .secondary)
                 Text(tr("지금 충전 (출장·외출)"))
                 Spacer()
-                chip("80%", selected: t == 80) { t == 80 ? settings.cancelOneShot() : settings.startOneShot(80) }
-                chip("100%", selected: t == 100) { t == 100 ? settings.cancelOneShot() : settings.startOneShot(100) }
+                chip("80%", selected: t == 80) { t == 80 ? settings.cancelOneShot() : settings.startOneShot(80, inHours: departIn) }
+                chip("100%", selected: t == 100) { t == 100 ? settings.cancelOneShot() : settings.startOneShot(100, inHours: departIn) }
+            }
+            // 출발 시각: 늦게 나가면 그 시각에 맞춰 늦게 충전 (높은 %로 오래 머물지 않게)
+            HStack(spacing: 5) {
+                Text(tr("출발")).font(.caption).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                ForEach([0.0, 1, 2, 3], id: \.self) { h in
+                    chip(h == 0 ? tr("지금") : tr("\(Int(h))시간 후"), selected: shownDepartIn == h, compact: true) {
+                        departIn = h
+                        if t > 0 { settings.setOneShotDeparture(inHours: h) }
+                    }
+                }
+                Spacer(minLength: 0)
             }
             if t > 0 {
                 HStack {
-                    if b.percent >= t - 1 {
+                    if let dep = settings.oneShotDeparture, let start = engine.oneShotStartAt, engine.mode != .oneShot, b.percent < t - 1 {
+                        Text(tr("\(dep.tTime) 출발 · \(start.tTime)부터 충전")).foregroundStyle(.secondary)
+                    } else if b.percent >= t - 1 {
                         Text(tr("충전 완료")).foregroundStyle(.green)
                     } else if let m = engine.minutesToCharge(to: t) {
                         Text(tr("\(t)%까지") + " " + fmtMinutes(m)).foregroundStyle(.secondary)

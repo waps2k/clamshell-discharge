@@ -30,6 +30,7 @@ struct DashboardView: View {
                 maintainSettings
                 scheduleSettings(.commute)
                 scheduleSettings(.leave)
+                scheduleSettings(.weekend)
             }
             .padding(20)
         }
@@ -228,11 +229,13 @@ struct DashboardView: View {
                 }
                 Text(k == .commute
                      ? tr("출근 시각 전에 목표까지 충전합니다. 집에서 전원을 계속 연결해 둘 때 유용합니다.")
+                     : k == .weekend
+                     ? tr("주말 외출 시각 전에 목표까지 충전합니다. 출근과 시각이 다를 때 씁니다.")
                      : tr("퇴근 시각 전에 유지 모드를 잠시 멈추고 목표까지 충전합니다. 퇴근 후 30분이 지나면 다시 유지 모드로 돌아갑니다."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Group {
                     HStack {
-                        Text(k == .commute ? tr("출근 시각") : tr("퇴근 시각"))
+                        Text(k == .commute ? tr("출근 시각") : k == .weekend ? tr("주말 외출 시각") : tr("퇴근 시각"))
                         DatePicker("", selection: Binding(get: {
                             Calendar.current.startOfDay(for: Date()).addingTimeInterval(TimeInterval(v.minutes * 60))
                         }, set: { d in

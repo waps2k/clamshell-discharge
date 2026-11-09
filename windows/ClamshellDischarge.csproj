@@ -14,7 +14,7 @@
     <AssemblyName>ClamshellDischarge</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Product>Clamshell Discharge for Windows</Product>
     <Copyright>MIT License</Copyright>
     <!-- 단일 실행 파일 배포 -->

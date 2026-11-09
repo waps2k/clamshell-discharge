@@ -30,6 +30,16 @@ final class Settings: ObservableObject {
     @Published var commuteLead: Int { didSet { d.set(commuteLead, forKey: "commuteLead") } }
     @Published var commuteWeekdays: Set<Int> { didSet { d.set(Array(commuteWeekdays), forKey: "commuteWeekdays") } }
 
+    /// 주말 외출 충전: 출근과 시각이 다른 주말용 일정
+    @Published var weekendEnabled: Bool { didSet { d.set(weekendEnabled, forKey: "weekendEnabled") } }
+    @Published var weekendMinutes: Int { didSet { d.set(weekendMinutes, forKey: "weekendMinutes") } }
+    @Published var weekendTarget: Int { didSet { d.set(weekendTarget, forKey: "weekendTarget") } }
+    @Published var weekendLead: Int { didSet { d.set(weekendLead, forKey: "weekendLead") } }
+    @Published var weekendWeekdays: Set<Int> { didSet { d.set(Array(weekendWeekdays), forKey: "weekendWeekdays") } }
+
+    /// 지금 충전의 출발 시각 (epoch 초). 0 이면 바로 충전. 미래면 그 시각에 맞춰 늦게 시작
+    @Published var oneShotDepartAt: Double { didSet { d.set(oneShotDepartAt, forKey: "oneShotDepartAt") } }
+
     /// 지금 충전 (출장·외출): 0 이면 꺼짐. 목표 도달 후 어댑터를 뽑거나 24시간이 지나면 해제
     @Published var oneShotTarget: Int { didSet { d.set(oneShotTarget, forKey: "oneShotTarget") } }
     @Published var oneShotSince: Double { didSet { d.set(oneShotSince, forKey: "oneShotSince") } }
@@ -49,7 +59,8 @@ final class Settings: ObservableObject {
             "departureEnabled": false, "departureMinutes": 18 * 60, "departureTarget": 100,
             "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6],
             "commuteEnabled": false, "commuteMinutes": 8 * 60, "commuteTarget": 80, "commuteLead": 90,
-            "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "autoMode": false, "hidWake": true, "language": "system",
+            "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "oneShotDepartAt": 0.0,
+            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -64,6 +75,12 @@ final class Settings: ObservableObject {
         commuteTarget = d.integer(forKey: "commuteTarget")
         commuteLead = d.integer(forKey: "commuteLead")
         commuteWeekdays = Set((d.array(forKey: "commuteWeekdays") as? [Int]) ?? [2, 3, 4, 5, 6])
+        weekendEnabled = d.bool(forKey: "weekendEnabled")
+        weekendMinutes = d.integer(forKey: "weekendMinutes")
+        weekendTarget = d.integer(forKey: "weekendTarget")
+        weekendLead = d.integer(forKey: "weekendLead")
+        weekendWeekdays = Set((d.array(forKey: "weekendWeekdays") as? [Int]) ?? [7, 1])
+        oneShotDepartAt = d.double(forKey: "oneShotDepartAt")
         oneShotTarget = d.integer(forKey: "oneShotTarget")
         oneShotSince = d.double(forKey: "oneShotSince")
         autoMode = d.bool(forKey: "autoMode")
@@ -79,6 +96,7 @@ final class Settings: ObservableObject {
         switch k {
         case .commute: return ScheduleValues(enabled: commuteEnabled, minutes: commuteMinutes, target: commuteTarget, lead: commuteLead, weekdays: commuteWeekdays)
         case .leave: return ScheduleValues(enabled: departureEnabled, minutes: departureMinutes, target: departureTarget, lead: departureLead, weekdays: departureWeekdays)
+        case .weekend: return ScheduleValues(enabled: weekendEnabled, minutes: weekendMinutes, target: weekendTarget, lead: weekendLead, weekdays: weekendWeekdays)
         }
     }
 
@@ -98,23 +116,50 @@ final class Settings: ObservableObject {
             if departureTarget != v.target { departureTarget = v.target }
             if departureLead != v.lead { departureLead = v.lead }
             if departureWeekdays != v.weekdays { departureWeekdays = v.weekdays }
+        case .weekend:
+            if weekendEnabled != v.enabled { weekendEnabled = v.enabled }
+            if weekendMinutes != v.minutes { weekendMinutes = v.minutes }
+            if weekendTarget != v.target { weekendTarget = v.target }
+            if weekendLead != v.lead { weekendLead = v.lead }
+            if weekendWeekdays != v.weekdays { weekendWeekdays = v.weekdays }
         }
     }
 
-    func startOneShot(_ target: Int) {
+    /// target 까지 충전. inHours 시간 뒤 출발이면 그 시각에 맞춰 늦게 시작 (0 = 바로)
+    func startOneShot(_ target: Int, inHours: Double? = nil) {
         oneShotSince = Date().timeIntervalSince1970
+        if let h = inHours { oneShotDepartAt = h > 0 ? Date().addingTimeInterval(h * 3600).timeIntervalSince1970 : 0 }
         oneShotTarget = target
     }
+
+    /// 출발까지 남은 시간 선택 (켜져 있으면 바로 반영)
+    func setOneShotDeparture(inHours h: Double) {
+        oneShotDepartAt = h > 0 ? Date().addingTimeInterval(h * 3600).timeIntervalSince1970 : 0
+    }
+
+    var oneShotDeparture: Date? { oneShotDepartAt > Date().timeIntervalSince1970 - 3600 && oneShotDepartAt > 0 ? Date(timeIntervalSince1970: oneShotDepartAt) : nil }
 
     func cancelOneShot() { oneShotTarget = 0 }
 }
 
 enum ScheduleKind: String, CaseIterable, Identifiable {
-    case commute, leave
+    case commute, leave, weekend
     var id: String { rawValue }
     /// 이름 (번역 키)
-    var title: String { self == .commute ? tr("출근 충전") : tr("퇴근 충전") }
-    var shortTitle: String { self == .commute ? tr("출근") : tr("퇴근") }
+    var title: String {
+        switch self { case .commute: tr("출근 충전"); case .leave: tr("퇴근 충전"); case .weekend: tr("주말 외출 충전") }
+    }
+    var shortTitle: String {
+        switch self { case .commute: tr("출근"); case .leave: tr("퇴근"); case .weekend: tr("주말") }
+    }
+    /// 시각 메뉴에 보여줄 자주 쓰는 시각
+    var presets: [Int] {
+        switch self {
+        case .commute: [6 * 60 + 30, 7 * 60, 7 * 60 + 30, 8 * 60, 8 * 60 + 30, 9 * 60, 9 * 60 + 30]
+        case .leave: [16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60]
+        case .weekend: [8 * 60, 9 * 60, 10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60]
+        }
+    }
 }
 
 struct ScheduleValues: Equatable {
@@ -185,6 +230,7 @@ enum ChargeMode: String {
     case departure = "퇴근 충전"
     case commute = "출근 충전"
     case oneShot = "지금 충전"
+    case weekend = "주말 외출 충전"
     case manual = "수동 방전 중"
     case unavailable = "battery CLI 권한 없음"
 
@@ -203,6 +249,9 @@ final class Engine: ObservableObject {
     @Published var condition = "…"
     @Published var nextDeparture: Date?      // 다음 퇴근 충전 시각
     @Published var nextCommute: Date?        // 다음 출근 충전 시각
+    @Published var nextTimes: [ScheduleKind: Date] = [:]
+    /// 지금 충전을 출발 시각에 맞춰 늦게 시작할 때, 충전을 시작할 시각 (그 전까지는 유지 모드)
+    @Published var oneShotStartAt: Date?
     /// 수동 방전 상태 (AppDelegate 타이머가 갱신; 뷰는 이 값만 읽음)
     @Published var manualRunning = false
     @Published var manualTarget: Int?
@@ -322,6 +371,7 @@ final class Engine: ObservableObject {
         snapshot = b
         nextDeparture = nextTime(.leave)
         nextCommute = nextTime(.commute)
+        nextTimes = Dictionary(uniqueKeysWithValues: ScheduleKind.allCases.compactMap { k in nextTime(k).map { (k, $0) } })
         record(b)
         updateOneShot(b)
 
@@ -341,11 +391,11 @@ final class Engine: ObservableObject {
             // 클램쉘 + 화면 꺼짐: AC 유지 (깨우기 보장). 화면이 켜지면 다시 유지 모드.
             mode = settings.maintainEnabled ? .maintain : .off
             want = nil
-        } else if settings.oneShotTarget > 0 {
+        } else if settings.oneShotTarget > 0 && oneShotShouldCharge(b) {
             mode = .oneShot
             want = settings.oneShotTarget
         } else if let k = activeSchedule() {
-            mode = k == .commute ? .commute : .departure
+            mode = k == .commute ? .commute : k == .weekend ? .weekend : .departure
             want = settings.schedule(k).target
         } else if settings.maintainEnabled && (!settings.maintainOnlyClamshell || Battery.lidClosed()) {
             mode = .maintain
@@ -366,6 +416,39 @@ final class Engine: ObservableObject {
             Adapter.setBlocked(false)           // 목표 100% 이거나 유지 꺼짐 → 정상 충전
         }
         adapterBlocked = Adapter.isBlocked()
+    }
+
+    // MARK: 지금 충전 시작 시각 계산
+
+    /// 기록에서 배운 이 Mac 의 충전 속도 (%/분, 80% 아래 구간). 기록이 부족하면 1.0
+    func learnedChargeRate() -> Double {
+        let cutoff = Date().addingTimeInterval(-14 * 86400)
+        let s = samples.filter { $0.date >= cutoff }
+        var rates: [Double] = []
+        for (a, b) in zip(s, s.dropFirst()) where a.charging && b.charging && b.percent > a.percent && b.percent <= 80 {
+            let mins = b.date.timeIntervalSince(a.date) / 60
+            if mins > 0.5 && mins < 10 { rates.append(Double(b.percent - a.percent) / mins) }
+        }
+        guard rates.count >= 5 else { return 1.0 }
+        let sorted = rates.sorted()
+        return min(3.0, max(0.3, sorted[sorted.count / 2]))  // 중앙값
+    }
+
+    /// from% → to% 충전에 걸릴 대략적인 분. 80% 위는 충전이 느려져 절반 속도로 계산
+    func estimateMinutes(from: Int, to: Int) -> Int {
+        guard to > from else { return 0 }
+        let r = learnedChargeRate()
+        var m = 0.0
+        for p in from..<to { m += p < 80 ? 1 / r : 2 / r }
+        return Int(m.rounded(.up))
+    }
+
+    /// 출발 시각이 정해져 있으면, (출발 − 예상 충전 시간 − 여유 15분) 이후에만 충전
+    private func oneShotShouldCharge(_ b: BatterySnapshot) -> Bool {
+        guard let dep = settings.oneShotDeparture, dep > Date() else { oneShotStartAt = nil; return true }
+        let start = dep.addingTimeInterval(-TimeInterval((estimateMinutes(from: b.percent, to: settings.oneShotTarget) + 15) * 60))
+        oneShotStartAt = start
+        return Date() >= start
     }
 
     /// 지금 충전 자동 해제: 목표에 닿은 뒤 어댑터를 뽑았거나(가지고 나감) 24시간이 지나면
