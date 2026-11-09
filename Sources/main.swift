@@ -115,14 +115,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         if engine.permissionReady != perm { engine.permissionReady = perm }
     }
 
-    /// 전원 연결 중 화면 꺼짐 방지 (IOPM 어서션 — 앱이 종료되면 자동 해제)
+    /// 전원 연결 중 시스템 잠자기 방지 (화면은 설정대로 꺼짐. IOPM 어서션 — 앱이 종료되면 자동 해제)
     private var displayAssertion: IOPMAssertionID = 0
     func updateDisplayAssertion(plugged: Bool) {
         let want = settings.keepDisplayOnAC && plugged
         if want && displayAssertion == 0 {
-            IOPMAssertionCreateWithName(kIOPMAssertPreventUserIdleDisplaySleep as CFString,
+            IOPMAssertionCreateWithName(kIOPMAssertPreventUserIdleSystemSleep as CFString,
                                         IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                        "Clamshell Discharge: keep display on while on power" as CFString,
+                                        "Clamshell Discharge: no sleep while on power" as CFString,
                                         &displayAssertion)
         } else if !want && displayAssertion != 0 {
             IOPMAssertionRelease(displayAssertion)

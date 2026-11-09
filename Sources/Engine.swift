@@ -50,7 +50,7 @@ final class Settings: ObservableObject {
     @Published var language: String { didSet { d.set(language, forKey: "language") } }
     /// 화면이 꺼져 있을 때 블루투스(및 모든) 키보드/마우스 입력으로 화면 켜기
     @Published var hidWake: Bool { didSet { d.set(hidWake, forKey: "hidWake") } }
-    /// 전원(어댑터) 연결 중에는 화면이 저절로 꺼지지 않게 (세일링 중 포함)
+    /// 전원(어댑터) 연결 중에는 맥이 잠자기에 들어가지 않게 (세일링 중 포함, 화면은 꺼질 수 있음)
     @Published var keepDisplayOnAC: Bool { didSet { d.set(keepDisplayOnAC, forKey: "keepDisplayOnAC") } }
 
     let band = 3 // 세일링 폭: 목표에 닿으면 어댑터 차단, 목표-3% 까지 내려오면 다시 충전
