@@ -22,12 +22,12 @@ enum ChargeState {
 
     var label: String {
         switch self {
-        case .charging: "충전 중"
-        case .sailing: "방전 중 · 유지 모드"
-        case .manualDischarge: "방전 중 · 수동 방전"
-        case .onBattery: "배터리 사용 중"
-        case .full: "충전 완료"
-        case .pluggedIdle: "전원 연결됨 · 충전 대기"
+        case .charging: tr("충전 중")
+        case .sailing: tr("방전 중 · 유지 모드")
+        case .manualDischarge: tr("방전 중 · 수동 방전")
+        case .onBattery: tr("배터리 사용 중")
+        case .full: tr("충전 완료")
+        case .pluggedIdle: tr("전원 연결됨 · 충전 대기")
         }
     }
     var color: Color {
@@ -65,7 +65,7 @@ extension Engine {
 
 func levelColor(_ pct: Int) -> Color { pct <= 10 ? .red : (pct <= 20 ? .orange : .green) }
 
-func fmtMinutes(_ m: Int) -> String { m >= 60 ? "\(m / 60)시간 \(m % 60)분" : "\(m)분" }
+func fmtMinutes(_ m: Int) -> String { m >= 60 ? tr("\(m / 60)시간 \(m % 60)분") : tr("\(m)분") }
 
 // MARK: - 배터리 그림
 
@@ -119,14 +119,14 @@ struct PopoverView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 12) {
                     header(b, st)
-                    section("사용 기록") { usageHistory }
-                    section("세부 사항") { details(b, st) }
-                    section("배터리") { batteryDetails(b) }
+                    section(tr("사용 기록")) { usageHistory }
+                    section(tr("세부 사항")) { details(b, st) }
+                    section(tr("배터리")) { batteryDetails(b) }
                 }
                 .frame(width: Self.columnWidth)
                 Divider()
                 VStack(spacing: 12) {
-                    section("모드") { controls }
+                    section(tr("모드")) { controls }
                     Spacer(minLength: 0)
                 }
                 .frame(width: Self.columnWidth)
@@ -163,7 +163,7 @@ struct PopoverView: View {
             .padding(.horizontal, 12).padding(.vertical, 5)
             .background(Capsule().fill(st.color.opacity(0.14)))
             if let t = engine.target, engine.mode == .maintain || engine.mode == .departure {
-                Text(engine.mode == .departure ? "퇴근 충전 · 목표 \(t)%" : "유지 모드 · \(t - settings.band)~\(t)%")
+                Text(engine.mode == .departure ? tr("퇴근 충전 · 목표 \(t)%") : tr("유지 모드 · \(t - settings.band)~\(t)%"))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -211,11 +211,11 @@ struct PopoverView: View {
             .padding(6)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.06)))
             HStack(spacing: 10) {
-                legend(.green, "충전")
-                legend(.blue, "유지(어댑터 차단)")
-                legend(.green.opacity(0.75), "배터리")
+                legend(.green, tr("충전"))
+                legend(.blue, tr("유지(어댑터 차단)"))
+                legend(.green.opacity(0.75), tr("배터리"))
                 Spacer()
-                Text("최근 4시간").foregroundStyle(.secondary)
+                Text(tr("최근 4시간")).foregroundStyle(.secondary)
             }
             .font(.caption2)
         }
@@ -229,20 +229,20 @@ struct PopoverView: View {
 
     func details(_ b: BatterySnapshot, _ st: ChargeState) -> some View {
         VStack(spacing: 6) {
-            row("공급원", b.plugged ? (engine.adapterBlocked ? "어댑터 \(b.adapterWatts)W (차단 중)" : "어댑터 \(b.adapterWatts)W") : "배터리 전원")
+            row(tr("공급원"), b.plugged ? (engine.adapterBlocked ? tr("어댑터 \(b.adapterWatts)W (차단 중)") : tr("어댑터 \(b.adapterWatts)W")) : tr("배터리 전원"))
             switch st {
             case .charging:
-                row("완충까지", b.timeToFull.map(fmtMinutes) ?? "계산 중")
+                row(tr("완충까지"), b.timeToFull.map(fmtMinutes) ?? tr("계산 중"))
                 if let t = engine.target, t < 100, let m = engine.minutesToCharge(to: t) {
-                    row("\(t)%까지", fmtMinutes(m))
+                    row(tr("\(t)%까지"), fmtMinutes(m))
                 }
             case .full, .pluggedIdle:
-                row("충전", "대기")
+                row(tr("충전"), tr("대기"))
             default:
-                row("남은 사용 시간", b.timeToEmpty.map(fmtMinutes) ?? "계산 중")
+                row(tr("남은 사용 시간"), b.timeToEmpty.map(fmtMinutes) ?? tr("계산 중"))
             }
             if settings.departureEnabled, let dep = engine.nextDeparture {
-                row("다음 퇴근 충전", "\(dep.formatted(date: .omitted, time: .shortened)) · \(settings.departureTarget)%")
+                row(tr("다음 퇴근 충전"), "\(dep.tTime) · \(settings.departureTarget)%")
             }
         }
     }
@@ -255,18 +255,18 @@ struct PopoverView: View {
                 .padding(.bottom, 6)
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 5) {
-                    row("어댑터", b.systemWatts.map { String(format: "%.1f W", $0) } ?? "-")
-                    row("전류", "\(b.amperage) mA")
-                    row("사이클", "\(b.cycles)")
+                    row(tr("어댑터"), b.systemWatts.map { String(format: "%.1f W", $0) } ?? "-")
+                    row(tr("전류"), "\(b.amperage) mA")
+                    row(tr("사이클"), "\(b.cycles)")
                 }
                 VStack(spacing: 5) {
-                    row("배터리", String(format: "%+.1f W", b.batteryWatts))
-                    row("전압", String(format: "%.2f V", Double(b.voltage) / 1000))
-                    row("온도", b.temperature.map { String(format: "%.1f°C", $0) } ?? "-",
+                    row(tr("배터리"), String(format: "%+.1f W", b.batteryWatts))
+                    row(tr("전압"), String(format: "%.2f V", Double(b.voltage) / 1000))
+                    row(tr("온도"), b.temperature.map { String(format: "%.1f°C", $0) } ?? "-",
                         tint: (b.temperature ?? 0) >= 40 ? .orange : .primary)
                 }
             }
-            row("macOS 판정", engine.condition)
+            row(tr("macOS 판정"), engine.condition)
         }
     }
 
@@ -280,7 +280,7 @@ struct PopoverView: View {
                 if on { settings.autoMode = true }
             })) {
                 HStack {
-                    Text("충전 유지")
+                    Text(tr("충전 유지"))
                     Spacer()
                     Text("\(settings.maintainLevel)%").monospacedDigit().foregroundStyle(.secondary)
                 }
@@ -290,13 +290,13 @@ struct PopoverView: View {
                     Slider(value: Binding(get: { Double(settings.maintainLevel) }, set: { settings.maintainLevel = Int($0) }),
                            in: 60...100, step: 5)
                     if settings.maintainLevel != 60 {
-                        Button("추천 60") { settings.maintainLevel = 60 }.controlSize(.mini)
+                        Button(tr("추천 60")) { settings.maintainLevel = 60 }.controlSize(.mini)
                     }
                 }
             }
             Toggle(isOn: $settings.departureEnabled) {
                 HStack {
-                    Text("퇴근 충전")
+                    Text(tr("퇴근 충전"))
                     Spacer()
                     Text("\(settings.departureTimeText) · \(settings.departureTarget)%").foregroundStyle(.secondary)
                 }
@@ -306,9 +306,9 @@ struct PopoverView: View {
             }
             Toggle(isOn: $settings.autoMode) {
                 HStack {
-                    Text("자동 업무 모드")
+                    Text(tr("자동 업무 모드"))
                     Spacer()
-                    Text("클램쉘").foregroundStyle(.secondary)
+                    Text(tr("클램쉘")).foregroundStyle(.secondary)
                 }
             }
             .disabled(!actions.permissionReady())
@@ -318,18 +318,18 @@ struct PopoverView: View {
                 tick += 1
             })) {
                 HStack {
-                    Text("블루투스 입력으로 화면 켜기")
+                    Text(tr("블루투스 입력으로 화면 켜기"))
                     Spacer()
                     if settings.hidWake && !HIDWaker.shared.accessGranted {
-                        Text("권한 필요").foregroundStyle(.orange)
+                        Text(tr("권한 필요")).foregroundStyle(.orange)
                     }
                 }
             }
             if settings.hidWake && !HIDWaker.shared.accessGranted {
                 HStack {
-                    Text("입력 모니터링 권한을 허용해야 동작합니다.").font(.caption2).foregroundStyle(.secondary)
+                    Text(tr("입력 모니터링 권한을 허용해야 동작합니다.")).font(.caption2).foregroundStyle(.secondary)
                     Spacer()
-                    Button("설정 열기") {
+                    Button(tr("설정 열기")) {
                         HIDWaker.shared.requestAccess()
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
                     }
@@ -341,21 +341,21 @@ struct PopoverView: View {
                 dischargeEditor(target: ds.target ?? 60)
                 HStack {
                     Spacer()
-                    Button("대시보드") { actions.openDashboard() }
+                    Button(tr("대시보드")) { actions.openDashboard() }
                 }
             } else {
                 HStack {
                     Menu {
                         ForEach([90, 85, 80, 75, 70, 60, 50], id: \.self) { t in
-                            Button("\(t)% 까지") { actions.startDischarge(t) }
+                            Button(tr("\(t)% 까지")) { actions.startDischarge(t) }
                         }
                     } label: {
-                        Label("수동 방전", systemImage: "arrow.down.circle")
+                        Label(tr("수동 방전"), systemImage: "arrow.down.circle")
                     }
                     .fixedSize()
                     .disabled(!actions.permissionReady())
                     Spacer()
-                    Button("대시보드") { actions.openDashboard() }
+                    Button(tr("대시보드")) { actions.openDashboard() }
                 }
             }
             if !actions.permissionReady() {
@@ -363,10 +363,10 @@ struct PopoverView: View {
                     actions.setupPermission()
                     tick += 1
                 } label: {
-                    Label("권한 설정 (최초 1회)…", systemImage: "lock.open")
+                    Label(tr("권한 설정 (최초 1회)…"), systemImage: "lock.open")
                 }
                 .buttonStyle(.borderedProminent)
-                Text("클램쉘 잠자기 제어(수동 방전·자동 업무 모드)에 필요합니다.").font(.caption2).foregroundStyle(.secondary)
+                Text(tr("클램쉘 잠자기 제어(수동 방전·자동 업무 모드)에 필요합니다.")).font(.caption2).foregroundStyle(.secondary)
             }
         }
         .toggleStyle(.switch)
@@ -379,7 +379,7 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.down.circle.fill").foregroundStyle(.orange)
-                Text("수동 방전 중").font(.callout.weight(.medium))
+                Text(tr("수동 방전 중")).font(.callout.weight(.medium))
                 Spacer()
                 stepButton("minus") { actions.changeDischargeTarget(target - 5); tick += 1 }
                 Text("\(target)%")
@@ -388,18 +388,18 @@ struct PopoverView: View {
                 stepButton("plus") { actions.changeDischargeTarget(target + 5); tick += 1 }
             }
             HStack(spacing: 6) {
-                Text("목표").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                Text(tr("목표")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
                 ForEach([50, 60, 70, 80, 90], id: \.self) { t in
                     chip("\(t)%", selected: target == t) { actions.changeDischargeTarget(t); tick += 1 }
                 }
             }
             HStack {
-                Text("바꾸면 바로 적용됩니다 (다시 시작 불필요)").font(.caption2).foregroundStyle(.secondary)
+                Text(tr("바꾸면 바로 적용됩니다 (다시 시작 불필요)")).font(.caption2).foregroundStyle(.secondary)
                 Spacer()
                 Button(role: .destructive) {
                     actions.stopDischarge()
                 } label: {
-                    Label("중지", systemImage: "stop.fill")
+                    Label(tr("중지"), systemImage: "stop.fill")
                 }
                 .controlSize(.small)
             }
@@ -416,7 +416,7 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 9) {
             // 퇴근 시각: −/+ 15분, 큰 숫자, 자주 쓰는 시각은 메뉴로
             HStack(spacing: 8) {
-                Text("퇴근").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                Text(tr("퇴근")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
                 stepButton("minus") { shiftDeparture(-15) }
                 Menu {
                     ForEach([16 * 60 + 30, 17 * 60, 17 * 60 + 30, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60], id: \.self) { m in
@@ -434,10 +434,10 @@ struct PopoverView: View {
                 Spacer()
                 Menu {
                     ForEach([30, 60, 90, 120, 180], id: \.self) { m in
-                        Button("\(m)분 전부터 충전") { settings.departureLead = m }
+                        Button(tr("\(m)분 전부터 충전")) { settings.departureLead = m }
                     }
                 } label: {
-                    Text("\(settings.departureLead)분 전 시작").font(.caption)
+                    Text(tr("\(settings.departureLead)분 전 시작")).font(.caption)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -445,7 +445,7 @@ struct PopoverView: View {
 
             // 목표: 프리셋 칩 + 미세 조정 슬라이더
             HStack(spacing: 6) {
-                Text("목표").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                Text(tr("목표")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
                 ForEach([80, 90, 100], id: \.self) { t in
                     chip("\(t)%", selected: settings.departureTarget == t) { settings.departureTarget = t }
                 }
@@ -455,12 +455,12 @@ struct PopoverView: View {
             }
             Slider(value: Binding(get: { Double(settings.departureTarget) }, set: { settings.departureTarget = Int($0) }),
                    in: 60...100, step: 5)
-                .padding(.leading, 40)
+                .padding(.leading, 52)
 
             // 요일
             HStack(spacing: 4) {
-                Text("요일").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
-                ForEach([(2, "월"), (3, "화"), (4, "수"), (5, "목"), (6, "금"), (7, "토"), (1, "일")], id: \.0) { wd, name in
+                Text(tr("요일")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
+                ForEach([(2, tr("월")), (3, tr("화")), (4, tr("수")), (5, tr("목")), (6, tr("금")), (7, tr("토")), (1, tr("일"))], id: \.0) { wd, name in
                     chip(name, selected: settings.departureWeekdays.contains(wd), compact: true) {
                         if settings.departureWeekdays.contains(wd) { settings.departureWeekdays.remove(wd) }
                         else { settings.departureWeekdays.insert(wd) }
@@ -470,11 +470,11 @@ struct PopoverView: View {
 
             if let dep = engine.nextDeparture {
                 let start = dep.addingTimeInterval(-TimeInterval(settings.departureLead * 60))
-                Label("\(start.formatted(date: .omitted, time: .shortened))부터 충전 → \(dep.formatted(.dateTime.weekday(.abbreviated).hour().minute()))까지 \(settings.departureTarget)%",
+                Label(tr("\(start.tTime)부터 충전 → \(dep.tWeekdayTime)까지 \(settings.departureTarget)%"),
                       systemImage: "clock")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
-                Text("요일을 하나 이상 선택하세요").font(.caption2).foregroundStyle(.orange)
+                Text(tr("요일을 하나 이상 선택하세요")).font(.caption2).foregroundStyle(.orange)
             }
         }
         .font(.callout)
@@ -512,10 +512,16 @@ struct PopoverView: View {
     var footer: some View {
         HStack {
             Menu {
-                Button("로그 보기") { actions.openLog() }
-                Toggle("로그인 시 자동 실행", isOn: Binding(get: { actions.loginEnabled() }, set: { _ in actions.toggleLogin(); tick += 1 }))
+                Picker(tr("언어"), selection: $settings.language) {
+                    ForEach(L10n.languages, id: \.code) { l in
+                        Text(l.code == "system" ? tr("시스템 설정 따름") : l.name).tag(l.code)
+                    }
+                }
                 Divider()
-                Text("덮개 닫힌 채 모니터/어댑터를 뽑으면 자동 중지 후 잠자기")
+                Button(tr("로그 보기")) { actions.openLog() }
+                Toggle(tr("로그인 시 자동 실행"), isOn: Binding(get: { actions.loginEnabled() }, set: { _ in actions.toggleLogin(); tick += 1 }))
+                Divider()
+                Text(tr("덮개 닫힌 채 모니터/어댑터를 뽑으면 자동 중지 후 잠자기"))
             } label: {
                 Image(systemName: "gearshape")
             }
@@ -525,7 +531,7 @@ struct PopoverView: View {
             Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
                 .font(.caption2).foregroundStyle(.tertiary)
             Spacer()
-            Button("종료") { actions.quit() }.controlSize(.small)
+            Button(tr("종료")) { actions.quit() }.controlSize(.small)
         }
         .id(tick)
     }

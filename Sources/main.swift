@@ -167,11 +167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         let out = sh("pmset -g batt").1
         let pct = out.range(of: #"\d+%"#, options: .regularExpression).map { String(out[$0]) } ?? "?"
         let state: String
-        if out.contains("discharging") { state = "방전 중" }
-        else if out.contains("charging") && !out.contains("not charging") { state = "충전 중" }
-        else if out.contains("charged") { state = "충전 완료" }
-        else { state = "충전 안 함" }
-        return "배터리 \(pct) · \(state)"
+        if out.contains("discharging") { state = tr("방전 중") }
+        else if out.contains("charging") && !out.contains("not charging") { state = tr("충전 중") }
+        else if out.contains("charged") { state = tr("충전 완료") }
+        else { state = tr("충전 안 함") }
+        return tr("배터리 \(pct) · \(state)")
     }
 
     func refreshIcon() {
@@ -196,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         if (isRunning || externalRunning), let t = currentDischargeTarget() { title += "→\(t)" }
         else if engine.mode == .departure { title += "⏰" }
         b.title = title
-        b.toolTip = "\(st.label)\(engine.target.map { " · 목표 \($0)%" } ?? "")"
+        b.toolTip = "\(st.label)\(engine.target.map { tr(" · 목표 \($0)%") } ?? "")"
     }
 
     // MARK: 팝오버
@@ -277,42 +277,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         status.isEnabled = false
         menu.addItem(status)
         if running, let t = target {
-            let s = NSMenuItem(title: "클램쉘 방전 실행 중 → \(t)%", action: nil, keyEquivalent: "")
+            let s = NSMenuItem(title: tr("클램쉘 방전 실행 중 → \(t)%"), action: nil, keyEquivalent: "")
             s.isEnabled = false
             menu.addItem(s)
         } else if ext {
-            let s = NSMenuItem(title: "터미널에서 방전 실행 중", action: nil, keyEquivalent: "")
+            let s = NSMenuItem(title: tr("터미널에서 방전 실행 중"), action: nil, keyEquivalent: "")
             s.isEnabled = false
             menu.addItem(s)
         }
         let b = engine.snapshot
-        let modeLine = NSMenuItem(title: "\(engine.mode.rawValue)\(engine.target.map { " · 목표 \($0)%" } ?? "")\(engine.adapterBlocked ? " · 어댑터 차단" : "") · SOH \(String(format: "%.1f", b.soh))%", action: nil, keyEquivalent: "")
+        let modeLine = NSMenuItem(title: "\(engine.mode.label)\(engine.target.map { tr(" · 목표 \($0)%") } ?? "")\(engine.adapterBlocked ? tr(" · 어댑터 차단") : "") · SOH \(String(format: "%.1f", b.soh))%", action: nil, keyEquivalent: "")
         modeLine.isEnabled = false
         menu.addItem(modeLine)
-        menu.addItem(withTitle: "배터리 대시보드…", action: #selector(openDashboard), keyEquivalent: "d").target = self
+        menu.addItem(withTitle: tr("배터리 대시보드…"), action: #selector(openDashboard), keyEquivalent: "d").target = self
         menu.addItem(.separator())
 
-        let maintain = NSMenuItem(title: "충전 유지 모드 (\(settings.maintainLevel)%)", action: #selector(toggleMaintain), keyEquivalent: "")
+        let maintain = NSMenuItem(title: tr("충전 유지 모드 (\(settings.maintainLevel)%)"), action: #selector(toggleMaintain), keyEquivalent: "")
         maintain.target = self
         maintain.state = settings.maintainEnabled ? .on : .off
         menu.addItem(maintain)
-        let dep = NSMenuItem(title: "퇴근 충전 (\(settings.departureTimeText) 까지 \(settings.departureTarget)%)", action: #selector(toggleDeparture), keyEquivalent: "")
+        let dep = NSMenuItem(title: tr("퇴근 충전 (\(settings.departureTimeText) 까지 \(settings.departureTarget)%)"), action: #selector(toggleDeparture), keyEquivalent: "")
         dep.target = self
         dep.state = settings.departureEnabled ? .on : .off
         menu.addItem(dep)
         menu.addItem(.separator())
 
         if !batteryInstalled {
-            let m = NSMenuItem(title: "battery CLI 미설치", action: nil, keyEquivalent: "")
+            let m = NSMenuItem(title: tr("battery CLI 미설치"), action: nil, keyEquivalent: "")
             m.isEnabled = false
             menu.addItem(m)
         } else if !permissionReady {
-            menu.addItem(withTitle: "권한 설정 (최초 1회)…", action: #selector(setupPermission), keyEquivalent: "").target = self
+            menu.addItem(withTitle: tr("권한 설정 (최초 1회)…"), action: #selector(setupPermission), keyEquivalent: "").target = self
         } else {
-            let start = NSMenuItem(title: "방전 시작", action: nil, keyEquivalent: "")
+            let start = NSMenuItem(title: tr("방전 시작"), action: nil, keyEquivalent: "")
             let sub = NSMenu()
             for t in targets {
-                let mi = NSMenuItem(title: "\(t)% 까지", action: #selector(startDischarge(_:)), keyEquivalent: "")
+                let mi = NSMenuItem(title: tr("\(t)% 까지"), action: #selector(startDischarge(_:)), keyEquivalent: "")
                 mi.target = self
                 mi.tag = t
                 sub.addItem(mi)
@@ -320,7 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             start.submenu = sub
             if running || ext {
                 // 실행 중에는 같은 자리에서 목표만 바꿈
-                start.title = "방전 목표 변경 (지금 \(currentDischargeTarget().map { "\($0)%" } ?? "?"))"
+                start.title = tr("방전 목표 변경 (지금 \(currentDischargeTarget().map { "\($0)%" } ?? "?"))")
                 for mi in sub.items {
                     mi.action = #selector(changeDischargeTargetMenu(_:))
                     mi.state = mi.tag == currentDischargeTarget() ? .on : .off
@@ -329,36 +329,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             menu.addItem(start)
         }
 
-        let auto = NSMenuItem(title: "자동 업무 모드 (전원: 덮개 닫아도 동작 / 배터리: 잠자기)", action: permissionReady ? #selector(toggleAutoMode) : nil, keyEquivalent: "")
+        let auto = NSMenuItem(title: tr("자동 업무 모드 (전원: 덮개 닫아도 동작 / 배터리: 잠자기)"), action: permissionReady ? #selector(toggleAutoMode) : nil, keyEquivalent: "")
         auto.target = self
         auto.state = autoMode ? .on : .off
         menu.addItem(auto)
         if autoMode {
             let plugged = adapterPlugged(), closed = lidClosed(), d = externalDisplayCount()
-            let st = NSMenuItem(title: "   지금: \(plugged ? "전원 연결" : "배터리") · 덮개 \(closed ? "닫힘" : "열림") · 외장 모니터 \(d)대 · 잠자기 \(sleepDisabledNow() ? "차단" : "허용")", action: nil, keyEquivalent: "")
+            let st = NSMenuItem(title: tr("   지금: \(plugged ? tr("전원 연결") : tr("배터리")) · 덮개 \(closed ? tr("닫힘") : tr("열림")) · 외장 모니터 \(d)대 · 잠자기 \(sleepDisabledNow() ? tr("차단") : tr("허용"))"), action: nil, keyEquivalent: "")
             st.isEnabled = false
             menu.addItem(st)
         }
         menu.addItem(.separator())
 
-        let stop = NSMenuItem(title: "방전 중지", action: (running || ext) ? #selector(stopDischarge) : nil, keyEquivalent: "")
+        let stop = NSMenuItem(title: tr("방전 중지"), action: (running || ext) ? #selector(stopDischarge) : nil, keyEquivalent: "")
         stop.target = self
         menu.addItem(stop)
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "로그 보기", action: #selector(openLog), keyEquivalent: "").target = self
+        menu.addItem(withTitle: tr("로그 보기"), action: #selector(openLog), keyEquivalent: "").target = self
 
-        let login = NSMenuItem(title: "로그인 시 자동 실행", action: #selector(toggleLogin), keyEquivalent: "")
+        let login = NSMenuItem(title: tr("로그인 시 자동 실행"), action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
 
-        let help = NSMenuItem(title: "덮개 닫힌 채 모니터/어댑터를 뽑으면 자동 중지 후 잠자기", action: nil, keyEquivalent: "")
+        let help = NSMenuItem(title: tr("덮개 닫힌 채 모니터/어댑터를 뽑으면 자동 중지 후 잠자기"), action: nil, keyEquivalent: "")
         help.isEnabled = false
         menu.addItem(help)
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
+        menu.addItem(withTitle: tr("종료"), action: #selector(quit), keyEquivalent: "q").target = self
     }
 
     // MARK: 동작
@@ -382,7 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
                 self?.syncManualState()
                 self?.refreshIcon()
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
-                    self?.notify("방전 시작 실패 — 로그를 확인하세요")
+                    self?.notify(tr("방전 시작 실패 — 로그를 확인하세요"))
                 }
             }
         }
@@ -394,7 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             engine.tick()
             refreshIcon()
         } catch {
-            notify("실행 실패: \(error.localizedDescription)")
+            notify(tr("실행 실패: \(error.localizedDescription)"))
         }
     }
 
@@ -435,11 +435,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         NSAppleScript(source: src)?.executeAndReturnError(&err)
         if let err = err {
             if (err[NSAppleScript.errorNumber] as? Int) != -128 { // -128 = 사용자가 취소
-                notify("권한 설정 실패: \(err[NSAppleScript.errorMessage] ?? "")")
+                notify(tr("권한 설정 실패: \(err[NSAppleScript.errorMessage] ?? "")"))
             }
         } else {
             syncManualState()
-            notify(permissionReady ? "권한 설정 완료" : "권한 설정이 적용되지 않았습니다")
+            notify(permissionReady ? tr("권한 설정 완료") : tr("권한 설정이 적용되지 않았습니다"))
         }
     }
 
@@ -458,7 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
                 try SMAppService.mainApp.register()
             }
         } catch {
-            notify("로그인 항목 설정 실패: \(error.localizedDescription)")
+            notify(tr("로그인 항목 설정 실패: \(error.localizedDescription)"))
         }
     }
 

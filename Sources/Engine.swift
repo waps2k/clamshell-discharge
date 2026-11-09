@@ -25,6 +25,8 @@ final class Settings: ObservableObject {
 
     /// 자동 업무 모드 (AppDelegate 와 공유)
     @Published var autoMode: Bool { didSet { d.set(autoMode, forKey: "autoMode") } }
+    /// 표시 언어: "system" | "ko" | "en" | "ja" | "zh-Hans"
+    @Published var language: String { didSet { d.set(language, forKey: "language") } }
     /// 화면이 꺼져 있을 때 블루투스(및 모든) 키보드/마우스 입력으로 화면 켜기
     @Published var hidWake: Bool { didSet { d.set(hidWake, forKey: "hidWake") } }
 
@@ -34,7 +36,7 @@ final class Settings: ObservableObject {
         d.register(defaults: [
             "maintainEnabled": false, "maintainLevel": 60, "maintainOnlyClamshell": false,
             "departureEnabled": false, "departureMinutes": 18 * 60, "departureTarget": 100,
-            "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6], "autoMode": false, "hidWake": true,
+            "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6], "autoMode": false, "hidWake": true, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -46,6 +48,7 @@ final class Settings: ObservableObject {
         departureWeekdays = Set((d.array(forKey: "departureWeekdays") as? [Int]) ?? [2, 3, 4, 5, 6])
         autoMode = d.bool(forKey: "autoMode")
         hidWake = d.bool(forKey: "hidWake")
+        language = d.string(forKey: "language") ?? "system"
     }
 
     var departureTimeText: String { String(format: "%02d:%02d", departureMinutes / 60, departureMinutes % 60) }
@@ -110,6 +113,8 @@ enum ChargeMode: String {
     case departure = "퇴근 충전"
     case manual = "수동 방전 중"
     case unavailable = "battery CLI 권한 없음"
+
+    var label: String { trKey(rawValue) }
 }
 
 final class Engine: ObservableObject {

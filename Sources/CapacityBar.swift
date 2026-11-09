@@ -22,7 +22,7 @@ struct CapacityBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text("용량").foregroundStyle(.secondary)
+                Text(tr("용량")).foregroundStyle(.secondary)
                 Spacer()
                 Text(current.formatted()).fontWeight(.semibold).monospacedDigit()
                 Text("/ \(max.formatted()) mAh").foregroundStyle(.secondary).monospacedDigit()
@@ -62,17 +62,17 @@ struct CapacityBar: View {
 
             if showLegend {
                 HStack(spacing: 10) {
-                    legend(fillColor, "현재 \(chargePct)%")
-                    legend(fillColor.opacity(0.3), "최대 \(max.formatted())")
-                    legend(Color.secondary.opacity(0.3), "설계 \(design.formatted())")
+                    legend(fillColor, tr("현재 \(chargePct)%"))
+                    legend(fillColor.opacity(0.3), tr("최대 \(max.formatted())"))
+                    legend(Color.secondary.opacity(0.3), tr("설계 \(design.formatted())"))
                     Spacer(minLength: 0)
                 }
                 .font(.caption2)
                 HStack {
-                    Text("배터리 성능(SOH) ").foregroundColor(.secondary)
+                    Text(tr("배터리 성능(SOH) ")).foregroundColor(.secondary)
                     + Text(String(format: "%.1f%%", soh)).foregroundColor(soh >= 80 ? Color.primary : Color.orange).fontWeight(.semibold)
                     Spacer()
-                    Text("열화로 \(lostPct)% (\((design - max).formatted()) mAh) 감소").foregroundStyle(.secondary)
+                    Text(tr("열화로 \(lostPct)% (\((design - max).formatted()) mAh) 감소")).foregroundStyle(.secondary)
                 }
                 .font(.caption)
             }
