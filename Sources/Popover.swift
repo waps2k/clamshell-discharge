@@ -108,7 +108,9 @@ struct PopoverView: View {
     @ObservedObject var settings = Settings.shared
     let actions: AppActions
     @State private var tick = 0
-    @State private var expanded: ScheduleKind? = nil  // 편집 칸을 펼친 일정
+    /// 처음 펼쳐 둘 일정 (스크린샷 생성용, 앱에서는 nil)
+    static var initialExpanded: ScheduleKind? = nil
+    @State private var expanded: ScheduleKind? = PopoverView.initialExpanded  // 편집 칸을 펼친 일정
     @State private var departIn: Double = 0            // 지금 충전: 출발까지 시간 (0 = 바로) // 메뉴 상태(로그인 항목 등) 재계산용
 
     static let columnWidth: CGFloat = 300
@@ -143,6 +145,7 @@ struct PopoverView: View {
         }
         .frame(width: Self.columnWidth * 2 + 16 + 32 + 1)
         .fixedSize(horizontal: false, vertical: true)
+        .environment(\.locale, L10n.locale)
     }
 
     // MARK: 헤더

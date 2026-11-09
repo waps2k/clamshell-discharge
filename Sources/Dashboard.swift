@@ -35,6 +35,8 @@ struct DashboardView: View {
             .padding(20)
         }
         .frame(minWidth: 640, minHeight: 720)
+        .environment(\.locale, L10n.locale)   // 그래프 축·시각 입력도 고른 언어로
+        .id(settings.language)
     }
 
     // MARK: 상태 카드
