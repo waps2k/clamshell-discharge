@@ -52,5 +52,12 @@ if [[ "${1:-}" == "--install" ]]; then
 	fi
 	rm -rf /Applications/ClamshellDischarge.app
 	ditto "$APP" /Applications/ClamshellDischarge.app
+	# 로컬 설치본은 개발자 인증서로 서명: 다시 빌드해도 macOS 가 같은 앱으로 알아봐서
+	# 입력 모니터링 같은 권한이 유지됨 (ad-hoc 서명은 빌드마다 바뀌어 권한이 풀림).
+	# 배포 zip 은 개인 정보(인증서 이름)가 들어가지 않도록 ad-hoc 그대로.
+	SIGN_ID=${SIGN_ID:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')}
+	if [[ -n "$SIGN_ID" ]]; then
+		codesign --force --deep -s "$SIGN_ID" /Applications/ClamshellDischarge.app && echo "signed for local install: $SIGN_ID"
+	fi
 	echo "installed: /Applications/ClamshellDischarge.app"
 fi
