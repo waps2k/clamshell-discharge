@@ -20,6 +20,10 @@ struct DashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 statusCards
+                GroupBox {
+                    CapacityBar(current: engine.snapshot.rawCurrent, max: engine.snapshot.rawMax, design: engine.snapshot.design, height: 20)
+                        .padding(4)
+                }
                 chargeChart
                 sohChart
                 maintainSettings

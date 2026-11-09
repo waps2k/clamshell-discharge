@@ -251,31 +251,12 @@ struct PopoverView: View {
 
     func batteryDetails(_ b: BatterySnapshot) -> some View {
         VStack(spacing: 6) {
-            HStack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("최대 용량").font(.caption2).foregroundStyle(.secondary)
-                    Text("\(b.rawMax) mAh").font(.callout)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("설계 용량").font(.caption2).foregroundStyle(.secondary)
-                    Text("\(b.design) mAh").font(.callout)
-                }
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.secondary.opacity(0.15))
-                    Capsule().fill(b.soh >= 80 ? Color.green : Color.orange)
-                        .frame(width: geo.size.width * min(1, CGFloat(b.soh) / 100))
-                }
-            }
-            .frame(height: 10)
-            .padding(.bottom, 4)
+            CapacityBar(current: b.rawCurrent, max: b.rawMax, design: b.design)
+                .padding(.bottom, 6)
             if let w = b.systemWatts { row("어댑터 입력", String(format: "%.2f W", w)) }
             row("배터리 전력", String(format: "%+.2f W", b.batteryWatts))
             row("전류", "\(b.amperage) mA")
             row("전압", String(format: "%.2f V", Double(b.voltage) / 1000))
-            row("상태 (SOH)", String(format: "%.1f%%", b.soh), tint: b.soh >= 80 ? .primary : .orange)
             row("사이클", "\(b.cycles) / \(b.designCycles)")
             if let t = b.temperature {
                 row("온도", String(format: "%.1f°C", t), tint: t >= 40 ? .orange : .primary)
