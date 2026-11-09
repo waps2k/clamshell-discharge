@@ -284,7 +284,11 @@ sudo pmset -a disablesleep 0
 
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-후원하기-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/waps99)
 
-앱의 ⚙︎ 메뉴 → **후원하기**에서도 열 수 있습니다. 후원은 선택이며, 모든 기능은 무료입니다.
+**국내에서는 토스로도 보낼 수 있습니다.** 휴대폰 카메라나 토스 앱으로 아래 QR을 스캔하세요.
+
+<img src="docs/donate/toss-qr.png" width="180" alt="토스 송금 QR">
+
+앱의 ⚙︎ 메뉴 → **후원하기**에서 Ko-fi를 열 수도 있습니다. 후원은 선택이며, 모든 기능은 무료입니다.
 
 ## 라이선스
 
