@@ -18,11 +18,12 @@
 set -u
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin
 
-BATTERY_BIN=/usr/local/co.palokaj.battery/battery
 SMC_BIN=/usr/local/co.palokaj.battery/smc
 PMSET=/usr/bin/pmset
 MIN_TARGET=20
 STATE_FILE="$HOME/.battery/clamshell-discharge.sleepdisabled"
+# 실행 중 목표 변경: 이 파일의 숫자를 바꾸면 다음 확인(10초 이내)부터 새 목표 적용
+TARGET_FILE="$HOME/.battery/clamshell-discharge.target"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
@@ -45,6 +46,25 @@ leaving() {
 }
 
 set_sleep_disabled() { sudo -n "$PMSET" -a disablesleep "$1" 2>/dev/null; }
+
+# 이 기기가 지원하는 어댑터 차단 키로 방전 시작 (battery CLI sudoers 가 비밀번호 없이 허용)
+start_discharge() {
+	if "$SMC_BIN" -k CHIE -r 2>/dev/null | grep -q 'bytes'; then
+		sudo -n "$SMC_BIN" -k CHIE -w 08 >/dev/null 2>&1
+	elif "$SMC_BIN" -k CH0J -r 2>/dev/null | grep -q 'bytes'; then
+		sudo -n "$SMC_BIN" -k CH0J -w 01 >/dev/null 2>&1
+	else
+		sudo -n "$SMC_BIN" -k CH0I -w 01 >/dev/null 2>&1
+	fi
+}
+
+discharging_now() { pmset -g batt | head -1 | grep -q "Battery Power"; }
+
+read_target() {
+	local t
+	t=$(cat "$TARGET_FILE" 2>/dev/null | tr -dc '0-9')
+	if [[ "$t" =~ ^[0-9]+$ ]] && (( t >= MIN_TARGET && t <= 100 )); then echo "$t"; else echo "$target"; fi
+}
 
 stop_discharge() {
 	# battery visudo 규칙에서 비밀번호 없이 허용된 명령들. 지원하지 않는 키는 조용히 무시.
@@ -78,7 +98,7 @@ if ! [[ "$target" =~ ^[0-9]+$ ]] || (( target < MIN_TARGET || target > 100 )); t
 	exit 1
 fi
 
-if [[ ! -x "$BATTERY_BIN" ]]; then
+if [[ ! -x "$SMC_BIN" ]]; then
 	log "❌ battery CLI 가 없습니다 (https://github.com/actuallymentor/battery)"
 	exit 1
 fi
@@ -99,7 +119,8 @@ if (( now <= target )); then
 	exit 0
 fi
 
-pmset -g batt | grep -q "AC Power" || log "⚠️  지금 어댑터가 연결돼 있지 않습니다 (그냥 배터리로 소모됩니다)."
+w=$(adapter_watts)
+[[ -n "$w" && "$w" != "0" ]] || pmset -g batt | grep -q "AC Power" || log "⚠️  지금 어댑터가 연결돼 있지 않습니다 (그냥 배터리로 소모됩니다)."
 
 # 원래 disablesleep 값 기록 (비정상 종료돼도 --restore 로 되돌릴 수 있게 파일에 저장)
 mkdir -p "$(dirname "$STATE_FILE")"
@@ -107,17 +128,15 @@ if [[ ! -f "$STATE_FILE" ]]; then
 	pmset -g | awk '/SleepDisabled/ {print $2}' > "$STATE_FILE"
 fi
 
-CAF_PID=""; BAT_PID=""; SLEEP_AFTER=0
+echo "$target" > "$TARGET_FILE"
+CAF_PID=""; SLEEP_AFTER=0
 cleanup() {
 	trap - EXIT INT TERM HUP
 	log "정리 중…"
-	if [[ -n "$BAT_PID" ]]; then
-		pkill -TERM -P "$BAT_PID" 2>/dev/null   # battery 내부의 caffeinate/sleep
-		kill "$BAT_PID" 2>/dev/null
-	fi
 	[[ -n "$CAF_PID" ]] && kill "$CAF_PID" 2>/dev/null
 	stop_discharge
 	restore_sleep
+	rm -f "$TARGET_FILE"
 	log "종료. 현재: $(pmset -g batt | tail -1 | sed 's/^[[:space:]]*//')"
 	if (( SLEEP_AFTER )); then
 		log "덮개가 닫혀 있으므로 지금 잠자기"
@@ -138,26 +157,29 @@ caffeinate -dimu &
 CAF_PID=$!
 
 log "방전 시작: ${now}% → ${target}%"
-"$BATTERY_BIN" discharge "$target" &
-BAT_PID=$!
+start_discharge
 
-# battery 가 끝나길 기다리면서: 안전장치(퍼센트 직접 감시) + 퇴근 감지
+# 목표 도달까지: 목표 파일 재확인(실시간 변경) + 퇴근 감지 + 차단 유지 확인
 n=0
-while kill -0 "$BAT_PID" 2>/dev/null; do
-	sleep 10
+while true; do
+	new=$(read_target)
+	if [[ "$new" != "$target" ]]; then
+		log "🎯 목표 변경: ${target}% → ${new}%"
+		target=$new
+	fi
+	p=$(pct)
+	if (( p <= target )); then
+		log "목표 도달: ${p}% (목표 ${target}%)"
+		break
+	fi
 	if why=$(leaving); then
 		log "🚶 퇴근 감지 ($why) — 방전 중단"
 		SLEEP_AFTER=1
 		exit 0
 	fi
-	(( n++ % 6 )) && continue   # 배터리 로그는 1분마다
-	p=$(pct)
-	log "배터리 ${p}%  ($(pmset -g batt | head -1 | sed "s/Now drawing from //"))"
-	if (( p <= target - 3 )) || (( p < MIN_TARGET )); then
-		log "⚠️  목표보다 낮아짐 — 강제 중단"
-		break
-	fi
+	# 다른 프로그램이 차단을 풀었으면 다시 차단
+	discharging_now || start_discharge
+	(( n++ % 6 )) || log "배터리 ${p}% → 목표 ${target}%  ($(pmset -g batt | head -1 | sed "s/Now drawing from //"))"
+	sleep 10
 done
-wait "$BAT_PID" 2>/dev/null
-BAT_PID=""
 log "방전 완료"

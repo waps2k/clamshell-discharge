@@ -9,6 +9,7 @@ import SwiftUI
 
 let logPath = "\(home)/.battery/clamshell-discharge.log"
 let sudoersPath = "/etc/sudoers.d/clamshell-discharge"
+let targetFilePath = "\(home)/.battery/clamshell-discharge.target"
 let targets = [90, 85, 80, 75, 70, 60, 50]
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopoverDelegate {
@@ -180,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         b.image = img
         b.imagePosition = .imageLeft
         var title = " \(snap.percent)%"
-        if (isRunning || externalRunning), let t = target { title += "→\(t)" }
+        if (isRunning || externalRunning), let t = currentDischargeTarget() { title += "→\(t)" }
         else if engine.mode == .departure { title += "⏰" }
         b.title = title
         b.toolTip = "\(st.label)\(engine.target.map { " · 목표 \($0)%" } ?? "")"
@@ -236,8 +237,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             stopDischarge: { [weak self] in self?.stopDischarge() },
             dischargeState: { [weak self] in
                 guard let self else { return (false, nil) }
-                return (self.isRunning || self.externalRunning, self.target)
+                let running = self.isRunning || self.externalRunning
+                return (running, running ? self.currentDischargeTarget() : nil)
             },
+            changeDischargeTarget: { [weak self] t in self?.changeDischargeTarget(t) },
             permissionReady: { [weak self] in self?.permissionReady ?? false },
             setupPermission: { [weak self] in self?.popover.performClose(nil); self?.setupPermission() },
             openLog: { [weak self] in self?.openLog() },
@@ -300,7 +303,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
                 sub.addItem(mi)
             }
             start.submenu = sub
-            start.isEnabled = !(running || ext)
+            if running || ext {
+                // 실행 중에는 같은 자리에서 목표만 바꿈
+                start.title = "방전 목표 변경 (지금 \(currentDischargeTarget().map { "\($0)%" } ?? "?"))"
+                for mi in sub.items {
+                    mi.action = #selector(changeDischargeTargetMenu(_:))
+                    mi.state = mi.tag == currentDischargeTarget() ? .on : .off
+                }
+            }
             menu.addItem(start)
         }
 
@@ -370,6 +380,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             notify("실행 실패: \(error.localizedDescription)")
         }
     }
+
+    /// 실행 중인 방전의 목표 (스크립트가 10초마다 이 파일을 다시 읽음)
+    func currentDischargeTarget() -> Int? {
+        if let s = try? String(contentsOfFile: targetFilePath, encoding: .utf8),
+           let t = Int(s.trimmingCharacters(in: .whitespacesAndNewlines)) { return t }
+        return target
+    }
+
+    /// 다시 시작하지 않고 목표만 변경
+    func changeDischargeTarget(_ t: Int) {
+        let t = max(20, min(100, t))
+        try? "\(t)\n".write(toFile: targetFilePath, atomically: true, encoding: .utf8)
+        target = t
+        refreshIcon()
+    }
+
+    @objc func changeDischargeTargetMenu(_ sender: NSMenuItem) { changeDischargeTarget(sender.tag) }
 
     @objc func stopDischarge() {
         if let p = proc, p.isRunning {

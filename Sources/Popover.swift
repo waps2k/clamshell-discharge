@@ -7,6 +7,7 @@ struct AppActions {
     var startDischarge: (Int) -> Void
     var stopDischarge: () -> Void
     var dischargeState: () -> (running: Bool, target: Int?)
+    var changeDischargeTarget: (Int) -> Void
     var permissionReady: () -> Bool
     var setupPermission: () -> Void
     var openLog: () -> Void
@@ -326,14 +327,14 @@ struct PopoverView: View {
             }
                 .disabled(!actions.permissionReady())
 
-            HStack {
-                if ds.running {
-                    Button {
-                        actions.stopDischarge()
-                    } label: {
-                        Label("방전 중지\(ds.target.map { " (→\($0)%)" } ?? "")", systemImage: "stop.fill")
-                    }
-                } else {
+            if ds.running {
+                dischargeEditor(target: ds.target ?? 60)
+                HStack {
+                    Spacer()
+                    Button("대시보드") { actions.openDashboard() }
+                }
+            } else {
+                HStack {
                     Menu {
                         ForEach([90, 85, 80, 75, 70, 60, 50], id: \.self) { t in
                             Button("\(t)% 까지") { actions.startDischarge(t) }
@@ -343,9 +344,9 @@ struct PopoverView: View {
                     }
                     .fixedSize()
                     .disabled(!actions.permissionReady())
+                    Spacer()
+                    Button("대시보드") { actions.openDashboard() }
                 }
-                Spacer()
-                Button("대시보드") { actions.openDashboard() }
             }
             if !actions.permissionReady() {
                 Button {
@@ -360,6 +361,43 @@ struct PopoverView: View {
         }
         .toggleStyle(.switch)
         .controlSize(.small)
+    }
+
+    // MARK: 수동 방전 (실행 중 목표 변경)
+
+    func dischargeEditor(target: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill").foregroundStyle(.orange)
+                Text("수동 방전 중").font(.callout.weight(.medium))
+                Spacer()
+                stepButton("minus") { actions.changeDischargeTarget(target - 5); tick += 1 }
+                Text("\(target)%")
+                    .font(.system(size: 17, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .frame(minWidth: 46)
+                stepButton("plus") { actions.changeDischargeTarget(target + 5); tick += 1 }
+            }
+            HStack(spacing: 6) {
+                Text("목표").foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                ForEach([50, 60, 70, 80, 90], id: \.self) { t in
+                    chip("\(t)%", selected: target == t) { actions.changeDischargeTarget(t); tick += 1 }
+                }
+            }
+            HStack {
+                Text("바꾸면 바로 적용됩니다 (다시 시작 불필요)").font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                Button(role: .destructive) {
+                    actions.stopDischarge()
+                } label: {
+                    Label("중지", systemImage: "stop.fill")
+                }
+                .controlSize(.small)
+            }
+        }
+        .font(.callout)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.08)))
+        .id(tick)
     }
 
     // MARK: 퇴근 충전 편집
