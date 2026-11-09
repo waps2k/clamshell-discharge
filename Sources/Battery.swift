@@ -87,13 +87,34 @@ enum Battery {
         b.systemWatts = SMC.readFloatLE("PDTR")
         if let v = int("AvgTimeToEmpty"), v > 0, v < 65535 { b.timeToEmpty = v }
         if let v = int("AvgTimeToFull"), v > 0, v < 65535 { b.timeToFull = v }
-        if let r = out.range(of: "\"AdapterDetails\" = \\{[^}]*\\}", options: .regularExpression) {
+        if let w = Battery.pdContractWatts() {
+            b.adapterWatts = w   // USB-C PD 전원 계약 기준 (뽑으면 바로 0)
+        } else if let r = out.range(of: "\"AdapterDetails\" = \\{[^}]*\\}", options: .regularExpression) {
+            // PD 정보가 없는 기종: AdapterDetails (뽑은 뒤에도 값이 남을 수 있음)
             let s = String(out[r])
             if let w = s.range(of: "\"Watts\"=[0-9]+", options: .regularExpression) {
                 b.adapterWatts = Int(s[w].split(separator: "=").last ?? "0") ?? 0
             }
         }
         return b
+    }
+
+    /// USB-C 포트의 실제 전원 계약(PD contract) 중 가장 큰 와트. 계약이 없으면 0.
+    /// 어댑터를 차단(CHIE)해도 계약은 유지되므로 '물리적으로 꽂혀 있는지' 판단에 쓴다.
+    /// AdapterDetails 는 뽑은 뒤에도 마지막 값이 남는 경우가 있어 믿을 수 없다.
+    /// PortControllerInfo 가 없는 기종이면 nil.
+    static func pdContractWatts() -> Int? {
+        let out = sh("ioreg -r -k PortControllerInfo -d 1").1
+        guard out.contains("PortControllerMaxPower") else { return nil }
+        var best = 0
+        for chunk in out.components(separatedBy: "{") where chunk.contains("PortControllerMaxPower") {
+            func val(_ key: String) -> Int {
+                guard let r = chunk.range(of: "\"\(key)\"=[0-9]+", options: .regularExpression) else { return 0 }
+                return Int(chunk[r].split(separator: "=").last ?? "0") ?? 0
+            }
+            if val("PortControllerActiveContractRdo") != 0 { best = max(best, val("PortControllerMaxPower") / 1000) }
+        }
+        return best
     }
 
     /// macOS 가 보고하는 배터리 상태 문자열 (예: "Normal", "Service Recommended") — 느리므로 가끔만 호출

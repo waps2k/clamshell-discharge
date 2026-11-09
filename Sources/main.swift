@@ -68,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             p.terminate()
             p.waitUntilExit()
         }
+        // 순서 중요: 어댑터 차단을 풀고 macOS 가 AC 전원으로 인식한 뒤에 잠자기를 되돌린다.
+        // 차단된 채(배터리로 인식) 덮개가 닫혀 있으면 바로 클램쉘 잠자기에 들어가고,
+        // 그 상태에서는 USB/블루투스 입력으로 깨울 수 없다.
         engine.shutdown()
         if autoMode && !externalRunning { _ = setSleepDisabled(false) }
     }
@@ -78,9 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
 
     func adapterPlugged() -> Bool {
         if sh("pmset -g batt | head -1").1.contains("AC Power") { return true }
-        let w = sh(#"ioreg -rn AppleSmartBattery | grep -o '"AdapterDetails" = {[^}]*}' | grep -Eo '"Watts"=[0-9]+' | head -1 | cut -d= -f2"#).1
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (Int(w) ?? 0) > 0
+        return (Battery.read()?.adapterWatts ?? 0) > 0
     }
 
     func lidClosed() -> Bool {

@@ -31,8 +31,22 @@ pct() { pmset -g batt | grep -Eo '[0-9]+%' | head -1 | tr -d '%'; }
 
 lid_closed() { ioreg -r -k AppleClamshellState -d 4 | grep -q '"AppleClamshellState" = Yes'; }
 
-# 방전 중에도 어댑터가 물리적으로 꽂혀 있으면 AdapterDetails 에 Watts 가 남아 있음
-adapter_watts() { ioreg -rn AppleSmartBattery | grep -o '"AdapterDetails" = {[^}]*}' | grep -Eo '"Watts"=[0-9]+' | head -1 | cut -d= -f2; }
+# 어댑터가 물리적으로 꽂혀 있는지: USB-C PD 전원 계약 기준 와트 (방전 중에도 유지, 뽑으면 0)
+# PD 정보가 없는 기종이면 AdapterDetails 로 대신함 (뽑은 뒤에도 값이 남을 수 있음)
+adapter_watts() {
+	local out
+	out=$(ioreg -r -k PortControllerInfo -d 1 2>/dev/null)
+	if [[ "$out" == *PortControllerMaxPower* ]]; then
+		echo "$out" | tr '{' '\n' | awk '/PortControllerMaxPower/ {
+			rdo = 0; mp = 0
+			if (match($0, /"PortControllerActiveContractRdo"=[0-9]+/)) { split(substr($0, RSTART, RLENGTH), a, "="); rdo = a[2] }
+			if (match($0, /"PortControllerMaxPower"=[0-9]+/)) { split(substr($0, RSTART, RLENGTH), b, "="); mp = b[2] }
+			if (rdo + 0 > 0 && mp + 0 > w) w = mp + 0
+		} END { print int(w / 1000) }'
+	else
+		ioreg -rn AppleSmartBattery | grep -o '"AdapterDetails" = {[^}]*}' | grep -Eo '"Watts"=[0-9]+' | head -1 | cut -d= -f2
+	fi
+}
 
 ext_displays() { system_profiler SPDisplaysDataType 2>/dev/null | grep -c "Resolution:"; }
 

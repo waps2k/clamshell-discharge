@@ -191,7 +191,14 @@ final class Engine: ObservableObject {
 
     /// 앱 종료 시: 어댑터 차단을 남기지 않음
     func shutdown() {
-        if Adapter.isBlocked() && !manualDischarge() { Adapter.setBlocked(false) }
+        guard Adapter.isBlocked() && !manualDischarge() else { return }
+        Adapter.setBlocked(false)
+        // 어댑터가 꽂혀 있으면 macOS 가 AC 전원으로 바꿔 인식할 때까지 최대 5초 기다림
+        guard (Battery.pdContractWatts() ?? 0) > 0 else { return }
+        for _ in 0..<20 {
+            if sh("pmset -g batt | head -1").1.contains("AC Power") { return }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
     }
 
     // MARK: 퇴근 스케줄
