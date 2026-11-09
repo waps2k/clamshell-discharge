@@ -120,6 +120,15 @@ final class Engine: ObservableObject {
     @Published var adapterBlocked = Adapter.isBlocked()
     @Published var condition = "…"
     @Published var nextDeparture: Date?
+    @Published var processes: [ProcessUsage] = []
+
+    /// 팝오버가 열려 있는 동안 자주 호출: 표시용 값만 갱신 (제어 로직은 tick)
+    func refreshLive() {
+        if let b = Battery.read() { snapshot = b }
+        adapterBlocked = Adapter.isBlocked()
+        let p = Processes.top()
+        processes = p
+    }
 
     /// 수동 방전 스크립트가 도는 중인지 (AppDelegate 가 알려줌)
     var manualDischarge: () -> Bool = { false }

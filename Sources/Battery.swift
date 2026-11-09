@@ -33,6 +33,13 @@ struct BatterySnapshot {
     var voltage = 0                // mV
     var amperage = 0               // mA (+충전 / -방전)
     var temperature: Double?       // °C
+    var timeToEmpty: Int?          // 분
+    var timeToFull: Int?           // 분
+    var systemWatts: Double?       // 시스템 전체 소비 전력 (SMC PDTR)
+    var nominal = 0                // NominalChargeCapacity (mAh)
+
+    /// 배터리 입출력 전력 (W): +충전 / -방전
+    var batteryWatts: Double { Double(voltage) * Double(amperage) / 1_000_000 }
 
     /// State of Health: 현재 최대 용량 / 설계 용량
     var soh: Double { design > 0 ? Double(rawMax) / Double(design) * 100 : 0 }
@@ -68,7 +75,12 @@ enum Battery {
         b.externalConnected = bool("ExternalConnected")
         b.voltage = int("Voltage") ?? 0
         b.amperage = int("InstantAmperage") ?? int("Amperage") ?? 0
-        if let t = int("Temperature") ?? int("VirtualTemperature"), t > 0 { b.temperature = Double(t) / 100 }
+        b.nominal = int("NominalChargeCapacity") ?? 0
+        if let t = SMC.readUInt16LE("B0AT"), t > 2000 { b.temperature = Double(t) / 10 - 273.15 } // 0.1 K
+        else if let t = int("Temperature"), t > 0 { b.temperature = Double(t) / 100 }
+        b.systemWatts = SMC.readFloatLE("PDTR")
+        if let v = int("AvgTimeToEmpty"), v > 0, v < 65535 { b.timeToEmpty = v }
+        if let v = int("AvgTimeToFull"), v > 0, v < 65535 { b.timeToFull = v }
         if let r = out.range(of: "\"AdapterDetails\" = \\{[^}]*\\}", options: .regularExpression) {
             let s = String(out[r])
             if let w = s.range(of: "\"Watts\"=[0-9]+", options: .regularExpression) {
@@ -112,5 +124,50 @@ enum Adapter {
     @discardableResult
     static func setBlocked(_ blocked: Bool) -> Bool {
         sh("sudo -n \(smcPath) -k CHIE -w \(blocked ? "08" : "00")").0 == 0
+    }
+}
+
+/// SMC 값 읽기 (읽기는 권한 불필요)
+enum SMC {
+    static func bytes(_ key: String) -> [UInt8]? {
+        let out = sh("\(smcPath) -k \(key) -r").1
+        guard let r = out.range(of: "bytes ([0-9a-f ]+)\\)", options: .regularExpression) else { return nil }
+        let hex = out[r].dropFirst(6).dropLast(1).split(separator: " ")
+        let b = hex.compactMap { UInt8($0, radix: 16) }
+        return b.isEmpty ? nil : b
+    }
+    static func readUInt16LE(_ key: String) -> Int? {
+        guard let b = bytes(key), b.count >= 2 else { return nil }
+        return Int(b[0]) | Int(b[1]) << 8
+    }
+    static func readFloatLE(_ key: String) -> Double? {
+        guard let b = bytes(key), b.count >= 4 else { return nil }
+        let bits = UInt32(b[0]) | UInt32(b[1]) << 8 | UInt32(b[2]) << 16 | UInt32(b[3]) << 24
+        let v = Double(Float(bitPattern: bits))
+        return v.isFinite ? v : nil
+    }
+}
+
+struct ProcessUsage: Identifiable {
+    let name: String
+    let cpu: Double
+    var id: String { name }
+}
+
+enum Processes {
+    /// CPU 사용량 상위 프로세스 (이름이 같은 건 합산)
+    static func top(_ n: Int = 6) -> [ProcessUsage] {
+        let out = sh("ps -Aceo pcpu=,comm= -r | head -40").1
+        var sum: [String: Double] = [:]
+        var order: [String] = []
+        for line in out.split(separator: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            guard let sp = t.firstIndex(of: " "), let v = Double(t[..<sp]) else { continue }
+            let name = t[sp...].trimmingCharacters(in: .whitespaces)
+            if sum[name] == nil { order.append(name) }
+            sum[name, default: 0] += v
+        }
+        return order.map { ProcessUsage(name: $0, cpu: sum[$0]!) }
+            .sorted { $0.cpu > $1.cpu }.prefix(n).map { $0 }
     }
 }

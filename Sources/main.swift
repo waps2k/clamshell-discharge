@@ -5,14 +5,17 @@
 
 import Cocoa
 import ServiceManagement
+import SwiftUI
 
 let logPath = "\(home)/.battery/clamshell-discharge.log"
 let sudoersPath = "/etc/sudoers.d/clamshell-discharge"
 let targets = [90, 85, 80, 75, 70, 60, 50]
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopoverDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let menu = NSMenu()
+    let popover = NSPopover()
+    var liveTimer: Timer?
     var proc: Process?
     var target: Int?
     var timer: Timer?
@@ -31,9 +34,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ n: Notification) {
         menu.delegate = self
-        item.menu = menu
+        if let b = item.button {
+            b.target = self
+            b.action = #selector(statusClicked)
+            b.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+        popover.behavior = .transient
+        popover.delegate = self
+        popover.contentViewController = NSHostingController(rootView: PopoverView(actions: makeActions()))
         refreshIcon()
-        timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.refreshIcon() }
+        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.refreshIcon() }
         autoTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.autoTick() }
         engine.manualDischarge = { [weak self] in
             guard let self else { return false }
@@ -151,19 +161,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func refreshIcon() {
         guard let b = item.button else { return }
-        let running = isRunning || externalRunning
-        let symbol = running ? "battery.25percent" : (autoMode ? "laptopcomputer.and.arrow.down" : "battery.100percent.bolt")
-        let img = NSImage(systemSymbolName: symbol, accessibilityDescription: "Clamshell Discharge")
+        let snap = engine.snapshot
+        let st = engine.chargeState
+        let symbol: String
+        switch st {
+        case .charging: symbol = "battery.100percent.bolt"
+        case .sailing: symbol = "sailboat.fill"
+        case .manualDischarge: symbol = "arrow.down.circle.fill"
+        case .pluggedIdle, .full: symbol = "powerplug.fill"
+        case .onBattery:
+            let p = snap.percent
+            symbol = p > 87 ? "battery.100percent" : p > 62 ? "battery.75percent" : p > 37 ? "battery.50percent" : p > 12 ? "battery.25percent" : "battery.0percent"
+        }
+        let img = NSImage(systemSymbolName: symbol, accessibilityDescription: st.label)
         img?.isTemplate = true
         b.image = img
         b.imagePosition = .imageLeft
-        if running {
-            b.title = target.map { " →\($0)%" } ?? " ↓"
-        } else if let t = engine.target, engine.mode == .maintain || engine.mode == .departure {
-            b.title = " \(engine.mode == .departure ? "⏰" : "⛵")\(t)%"
-        } else {
-            b.title = ""
+        var title = " \(snap.percent)%"
+        if (isRunning || externalRunning), let t = target { title += "→\(t)" }
+        else if engine.mode == .departure { title += "⏰" }
+        b.title = title
+        b.toolTip = "\(st.label)\(engine.target.map { " · 목표 \($0)%" } ?? "")"
+    }
+
+    // MARK: 팝오버
+
+    @objc func statusClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            popover.performClose(nil)
+            item.menu = menu
+            item.button?.performClick(nil)
+            item.menu = nil
+            return
         }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else if let b = item.button {
+            engine.refreshLive()
+            popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+        }
+    }
+
+    func popoverWillShow(_ notification: Notification) {
+        liveTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            self?.engine.refreshLive()
+            self?.refreshIcon()
+        }
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        liveTimer?.invalidate()
+        liveTimer = nil
+    }
+
+    func makeActions() -> AppActions {
+        AppActions(
+            startDischarge: { [weak self] t in self?.startDischarge(target: t) },
+            stopDischarge: { [weak self] in self?.stopDischarge() },
+            dischargeState: { [weak self] in
+                guard let self else { return (false, nil) }
+                return (self.isRunning || self.externalRunning, self.target)
+            },
+            permissionReady: { [weak self] in self?.permissionReady ?? false },
+            setupPermission: { [weak self] in self?.popover.performClose(nil); self?.setupPermission() },
+            openLog: { [weak self] in self?.openLog() },
+            loginEnabled: { SMAppService.mainApp.status == .enabled },
+            toggleLogin: { [weak self] in self?.toggleLogin() },
+            openDashboard: { [weak self] in self?.popover.performClose(nil); self?.openDashboard() },
+            quit: { [weak self] in self?.quit() }
+        )
     }
 
     // MARK: 메뉴
@@ -256,9 +323,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: 동작
 
-    @objc func startDischarge(_ sender: NSMenuItem) {
+    @objc func startDischarge(_ sender: NSMenuItem) { startDischarge(target: sender.tag) }
+
+    func startDischarge(target t: Int) {
         guard !isRunning else { return }
-        let t = sender.tag
         FileManager.default.createFile(atPath: logPath, contents: nil) // 실행마다 새 로그
         guard let fh = FileHandle(forWritingAtPath: logPath) else { return }
 
@@ -281,6 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try p.run()
             proc = p
             target = t
+            engine.tick()
             refreshIcon()
         } catch {
             notify("실행 실패: \(error.localizedDescription)")
