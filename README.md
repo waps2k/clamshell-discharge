@@ -1,0 +1,76 @@
+# Clamshell Discharge
+
+Apple Silicon MacBook에서 **어댑터를 꽂은 채 배터리를 능동 방전**하고, **덮개를 닫은 클램쉘 모드에서도** 계속 동작하게 해 주는 메뉴 막대 앱입니다.
+
+방전은 [actuallymentor/battery](https://github.com/actuallymentor/battery) CLI가 SMC로 어댑터를 차단해서 처리하고, 이 앱은 클램쉘 잠자기 제어·퇴근 감지·메뉴 막대 UI를 더합니다.
+
+## 왜 필요한가
+
+능동 방전 중에는 어댑터가 꽂혀 있어도 macOS가 **배터리 전원**으로 인식합니다. 그래서 `caffeinate -s`(AC 전원에서만 유효)로는 잠자기를 막지 못하고, 덮개를 닫으면 잠들어 버립니다. 이 앱은 방전 중에만 `pmset disablesleep 1`로 클램쉘 잠자기를 막고, 끝나면 반드시 원래 값으로 되돌립니다.
+
+## 기능
+
+- **방전 시작 / 중지**: 메뉴에서 목표(90·85·80·75·70·60·50%)를 고르면 그 값까지 방전합니다.
+- **자동 업무 모드**
+  - 전원(어댑터 물리 연결) + 외장 모니터 → 덮개를 닫아도 계속 동작
+  - 배터리이거나, 덮개가 닫혔는데 외장 모니터가 없으면 → 즉시 잠자기
+- **퇴근 감지**: 덮개를 닫은 채 외장 모니터나 어댑터를 뽑으면 방전을 멈추고, 잠자기 설정을 복원한 뒤 바로 잠듭니다. 가방 속에서 뜨거워지는 걸 막습니다.
+- **안전장치**: 목표는 20% 미만으로 설정할 수 없습니다. 목표보다 3% 이상 내려가면 강제로 중단합니다. 어떻게 종료되든(정상 종료, 중지, 앱 종료, 오류) 방전 해제와 잠자기 복원을 실행합니다.
+- 로그 보기, 로그인 시 자동 실행
+
+## 요구 사항
+
+- Apple Silicon MacBook, macOS 13 이상
+- [battery CLI](https://github.com/actuallymentor/battery) 설치
+  ```bash
+  curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash
+  ```
+- AlDente 같은 다른 충전 관리 앱은 제거해야 합니다. SMC 설정이 서로 충돌합니다.
+
+## 설치
+
+1. [Releases](../../releases)에서 `ClamshellDischarge-<버전>.zip`을 받아 압축을 풀고, `/Applications`로 옮깁니다.
+2. 처음 열 때는 **우클릭 → 열기**를 선택합니다. 유료 인증서가 아닌 ad-hoc 서명이기 때문입니다.
+3. 메뉴 막대 아이콘에서 **권한 설정 (최초 1회)…** 를 누르고 관리자 비밀번호를 입력합니다.
+   `/etc/sudoers.d/clamshell-discharge`가 만들어지며, 허용되는 명령은 다음 두 개뿐입니다.
+   ```
+   <사용자> ALL = (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
+   ```
+   덮개가 닫힌 상태에서는 비밀번호 창을 띄울 수 없으므로, 이 권한이 있어야 잠자기 설정을 자동으로 바꿀 수 있습니다.
+
+## CLI
+
+앱 번들에 들어 있는 스크립트를 터미널에서 직접 쓸 수도 있습니다.
+
+```bash
+/Applications/ClamshellDischarge.app/Contents/Resources/clamshell-discharge 80      # 80%까지 방전
+/Applications/ClamshellDischarge.app/Contents/Resources/clamshell-discharge --restore  # 비상 복구
+```
+
+## 빌드
+
+Xcode(또는 Command Line Tools)의 `swiftc`가 필요합니다.
+
+```bash
+./build.sh            # build/ClamshellDischarge.app + zip
+./build.sh --install  # + /Applications 설치
+```
+
+## 제거
+
+```bash
+sudo rm /etc/sudoers.d/clamshell-discharge
+rm -rf /Applications/ClamshellDischarge.app ~/.battery/clamshell-discharge.*
+sudo pmset -a disablesleep 0
+```
+
+## 주의
+
+- SMC를 직접 건드리는 도구입니다. 본인 책임 하에 사용하세요.
+- MagSafe가 없는 모델에서는 LED 관련 `SMCWriteKey ... e00002bc` 오류가 보일 수 있습니다. 무시해도 됩니다.
+- macOS 버전에 따라 battery CLI의 충전 한도 키가 지원되지 않을 수 있습니다. 방전 기능과는 무관합니다.
+- 자동 업무 모드에서 전원이 연결돼 있으면 덮개를 연 상태에서도 시스템 잠자기가 막힙니다. 디스플레이는 평소처럼 꺼집니다.
+
+## 라이선스
+
+MIT

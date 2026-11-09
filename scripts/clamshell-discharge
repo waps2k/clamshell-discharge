@@ -1,0 +1,158 @@
+#!/bin/bash
+# clamshell-discharge — 어댑터를 꽂은 채(클램쉘 포함) 배터리를 목표 %까지 능동 방전
+#
+# 동작:
+#   1) pmset disablesleep 1  → 덮개를 닫아도 잠들지 않게 함 (방전 중 macOS는 '배터리 전원'으로 인식하므로
+#      caffeinate -s 만으로는 클램쉘 잠자기를 막지 못함)
+#   2) caffeinate -dimu      → 유휴/디스크/디스플레이 잠자기 방지
+#   3) battery discharge N   → actuallymentor/battery CLI 로 SMC 어댑터 차단 후 목표까지 방전
+#   4) 퇴근 감지: 덮개 닫힌 채 외장 모니터 또는 어댑터를 뽑으면 즉시 중단 후 잠자기
+#   종료/중단(Ctrl+C, SIGTERM, 오류) 시 항상: 방전 해제 + disablesleep 원래 값 복원
+#
+# 사용법:  clamshell-discharge 80        (80%까지 방전)
+#          clamshell-discharge --restore (비상 복구: 방전 해제 + 잠자기 복원)
+#
+# 필요: battery CLI (https://github.com/actuallymentor/battery)
+#       /etc/sudoers.d/clamshell-discharge (pmset -a disablesleep 0/1 을 비밀번호 없이 허용)
+
+set -u
+PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin
+
+BATTERY_BIN=/usr/local/co.palokaj.battery/battery
+SMC_BIN=/usr/local/co.palokaj.battery/smc
+PMSET=/usr/bin/pmset
+MIN_TARGET=20
+STATE_FILE="$HOME/.battery/clamshell-discharge.sleepdisabled"
+
+log() { echo "[$(date '+%H:%M:%S')] $*"; }
+
+pct() { pmset -g batt | grep -Eo '[0-9]+%' | head -1 | tr -d '%'; }
+
+lid_closed() { ioreg -r -k AppleClamshellState -d 4 | grep -q '"AppleClamshellState" = Yes'; }
+
+# 방전 중에도 어댑터가 물리적으로 꽂혀 있으면 AdapterDetails 에 Watts 가 남아 있음
+adapter_watts() { ioreg -rn AppleSmartBattery | grep -o '"AdapterDetails" = {[^}]*}' | grep -Eo '"Watts"=[0-9]+' | head -1 | cut -d= -f2; }
+
+ext_displays() { system_profiler SPDisplaysDataType 2>/dev/null | grep -c "Resolution:"; }
+
+# 퇴근 감지: 덮개 닫힘 + (외장 모니터 없음 또는 어댑터 뽑힘) 이면 이유를 출력하고 0 반환
+leaving() {
+	lid_closed || return 1
+	local w; w=$(adapter_watts)
+	if [[ -z "$w" || "$w" == "0" ]]; then echo "어댑터 분리"; return 0; fi
+	if (( $(ext_displays) == 0 )); then echo "외장 모니터 분리"; return 0; fi
+	return 1
+}
+
+set_sleep_disabled() { sudo -n "$PMSET" -a disablesleep "$1" 2>/dev/null; }
+
+stop_discharge() {
+	# battery visudo 규칙에서 비밀번호 없이 허용된 명령들. 지원하지 않는 키는 조용히 무시.
+	sudo -n "$SMC_BIN" -k CHIE -w 00 >/dev/null 2>&1
+	sudo -n "$SMC_BIN" -k CH0J -w 00 >/dev/null 2>&1
+	sudo -n "$SMC_BIN" -k CH0I -w 00 >/dev/null 2>&1
+}
+
+restore_sleep() {
+	local orig=0
+	[[ -f "$STATE_FILE" ]] && orig=$(cat "$STATE_FILE")
+	[[ "$orig" =~ ^[01]$ ]] || orig=0
+	if set_sleep_disabled "$orig"; then
+		rm -f "$STATE_FILE"
+		log "잠자기 설정 복원 (disablesleep=$orig)"
+	else
+		log "⚠️  잠자기 복원 실패! 직접 실행하세요: sudo pmset -a disablesleep $orig"
+	fi
+}
+
+if [[ "${1:-}" == "--restore" ]]; then
+	stop_discharge
+	restore_sleep
+	log "복구 완료. 현재: $(pmset -g batt | tail -1)"
+	exit 0
+fi
+
+target="${1:-}"
+if ! [[ "$target" =~ ^[0-9]+$ ]] || (( target < MIN_TARGET || target > 100 )); then
+	echo "사용법: $(basename "$0") <목표%: $MIN_TARGET-100>   |   $(basename "$0") --restore"
+	exit 1
+fi
+
+if [[ ! -x "$BATTERY_BIN" ]]; then
+	log "❌ battery CLI 가 없습니다 (https://github.com/actuallymentor/battery)"
+	exit 1
+fi
+
+if ! sudo -n -l "$PMSET" -a disablesleep 1 >/dev/null 2>&1; then
+	log "❌ 권한 설정이 필요합니다 (/etc/sudoers.d/clamshell-discharge). 메뉴 막대 앱의 '권한 설정'을 먼저 실행하세요."
+	exit 1
+fi
+
+if launchctl print system/com.apphousekitchen.aldente-pro.helper >/dev/null 2>&1; then
+	log "❌ AlDente helper 가 아직 실행 중입니다. 충돌할 수 있으니 먼저 제거하세요."
+	exit 1
+fi
+
+now=$(pct)
+if (( now <= target )); then
+	log "이미 ${now}% (목표 ${target}% 이하) — 할 일 없음"
+	exit 0
+fi
+
+pmset -g batt | grep -q "AC Power" || log "⚠️  지금 어댑터가 연결돼 있지 않습니다 (그냥 배터리로 소모됩니다)."
+
+# 원래 disablesleep 값 기록 (비정상 종료돼도 --restore 로 되돌릴 수 있게 파일에 저장)
+mkdir -p "$(dirname "$STATE_FILE")"
+if [[ ! -f "$STATE_FILE" ]]; then
+	pmset -g | awk '/SleepDisabled/ {print $2}' > "$STATE_FILE"
+fi
+
+CAF_PID=""; BAT_PID=""; SLEEP_AFTER=0
+cleanup() {
+	trap - EXIT INT TERM HUP
+	log "정리 중…"
+	if [[ -n "$BAT_PID" ]]; then
+		pkill -TERM -P "$BAT_PID" 2>/dev/null   # battery 내부의 caffeinate/sleep
+		kill "$BAT_PID" 2>/dev/null
+	fi
+	[[ -n "$CAF_PID" ]] && kill "$CAF_PID" 2>/dev/null
+	stop_discharge
+	restore_sleep
+	log "종료. 현재: $(pmset -g batt | tail -1 | sed 's/^[[:space:]]*//')"
+	if (( SLEEP_AFTER )); then
+		log "덮개가 닫혀 있으므로 지금 잠자기"
+		pmset sleepnow >/dev/null
+	fi
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM HUP
+
+set_sleep_disabled 1 && log "클램쉘 잠자기 차단 (disablesleep=1)"
+
+caffeinate -dimu &
+CAF_PID=$!
+
+log "방전 시작: ${now}% → ${target}%"
+"$BATTERY_BIN" discharge "$target" &
+BAT_PID=$!
+
+# battery 가 끝나길 기다리면서: 안전장치(퍼센트 직접 감시) + 퇴근 감지
+n=0
+while kill -0 "$BAT_PID" 2>/dev/null; do
+	sleep 10
+	if why=$(leaving); then
+		log "🚶 퇴근 감지 ($why) — 방전 중단"
+		SLEEP_AFTER=1
+		exit 0
+	fi
+	(( n++ % 6 )) && continue   # 배터리 로그는 1분마다
+	p=$(pct)
+	log "배터리 ${p}%  ($(pmset -g batt | head -1 | sed "s/Now drawing from //"))"
+	if (( p <= target - 3 )) || (( p < MIN_TARGET )); then
+		log "⚠️  목표보다 낮아짐 — 강제 중단"
+		break
+	fi
+done
+wait "$BAT_PID" 2>/dev/null
+BAT_PID=""
+log "방전 완료"
