@@ -138,6 +138,9 @@ final class Engine: ObservableObject {
     var manualDischarge: () -> Bool = { false }
 
     private var timer: Timer?
+    /// 디스플레이가 잠든 상태. 덮개 닫힘 + 배터리 전원이면 macOS 가 USB 키보드/마우스로 화면을
+    /// 깨우지 않으므로, 이 동안에는 어댑터 차단을 풀어 AC 전원으로 둔다.
+    @Published var displaysAsleep = false
     private var lastSampleAt = Date.distantPast
     private var bag = Set<AnyCancellable>()
 
@@ -151,6 +154,19 @@ final class Engine: ObservableObject {
         }
         nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self?.tick() }
+        }
+        nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.displaysAsleep = true
+            // 덮개가 닫혀 있으면 바로 AC 로 돌려서 키보드/마우스로 깨울 수 있게
+            if Battery.lidClosed() && Adapter.isBlocked() && !self.manualDischarge() {
+                Adapter.setBlocked(false)
+                self.adapterBlocked = false
+            }
+        }
+        nc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.displaysAsleep = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.tick() }
         }
         // 설정이 바뀌면 바로 반영
         settings.objectWillChange
@@ -218,7 +234,11 @@ final class Engine: ObservableObject {
         }
 
         var want: Int?
-        if inDepartureWindow() {
+        if displaysAsleep && Battery.lidClosed() {
+            // 클램쉘 + 화면 꺼짐: AC 유지 (깨우기 보장). 화면이 켜지면 다시 유지 모드.
+            mode = settings.maintainEnabled ? .maintain : .off
+            want = nil
+        } else if inDepartureWindow() {
             mode = .departure
             want = settings.departureTarget
         } else if settings.maintainEnabled && (!settings.maintainOnlyClamshell || Battery.lidClosed()) {
