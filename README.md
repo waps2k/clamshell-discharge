@@ -31,7 +31,7 @@ A battery-care menu bar app for people who use an Apple Silicon MacBook **with t
 *The dashboard has status cards, the capacity bar, a charge chart (with maintain/commute/leave target lines), a daily SOH chart, and detailed settings for maintain charge and the three schedules (commute, leave, weekend). Chart axes and times follow the selected language.*
 </details>
 
-> **Windows preview:** a Windows 10/11 version with the same UI is in progress. Charge control currently supports Lenovo only. See [windows/README.md](windows/README.md) (Korean).
+> **Windows preview:** a Windows 10/11 version with the same UI is in progress. Charge control currently supports Lenovo only. See [windows/README.md](windows/README.md).
 
 Adapter blocking (SMC) uses the tool and permissions installed by the [actuallymentor/battery](https://github.com/actuallymentor/battery) CLI. This app adds charge maintenance, scheduled charging, clamshell sleep control, and the UI on top.
 

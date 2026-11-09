@@ -31,7 +31,7 @@ Apple Silicon MacBook을 **덮개를 닫은 채(클램쉘) 외장 모니터에 �
 *대시보드에는 상태 카드, 용량 막대, 충전량 그래프(유지·출근·퇴근 목표선), 일별 SOH 그래프, 충전 유지와 일정 3개(출근·퇴근·주말)의 세부 설정이 있습니다. 영어 화면은 그래프 축과 시각도 영어 형식으로 표시합니다.*
 </details>
 
-> **Windows 미리보기:** 같은 화면 구성의 Windows 10/11 판을 만들고 있습니다. 현재는 Lenovo만 충전 제어를 지원합니다. [windows/README.md](windows/README.md) 참고.
+> **Windows 미리보기:** 같은 화면 구성의 Windows 10/11 판을 만들고 있습니다. 현재는 Lenovo만 충전 제어를 지원합니다. [windows/README.ko.md](windows/README.ko.md) 참고.
 
 어댑터 차단(SMC)은 [actuallymentor/battery](https://github.com/actuallymentor/battery) CLI가 설치한 도구와 권한을 사용합니다. 이 앱은 그 위에 충전 유지·퇴근 충전·클램쉘 잠자기 제어·UI를 더합니다.
 
