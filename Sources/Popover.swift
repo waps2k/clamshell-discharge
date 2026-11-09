@@ -293,6 +293,13 @@ struct PopoverView: View {
                         Button(tr("추천 60")) { settings.maintainLevel = 60 }.controlSize(.mini)
                     }
                 }
+                // 집(덮개 열고 사용)에서도 유지할지
+                HStack(spacing: 6) {
+                    Text(tr("적용")).foregroundStyle(.secondary).lineLimit(1).frame(width: 46, alignment: .leading)
+                    chip(tr("항상"), selected: !settings.maintainOnlyClamshell) { settings.maintainOnlyClamshell = false }
+                    chip(tr("덮개 닫혔을 때만"), selected: settings.maintainOnlyClamshell) { settings.maintainOnlyClamshell = true }
+                    Spacer(minLength: 0)
+                }
             }
             Toggle(isOn: $settings.departureEnabled) {
                 HStack {
