@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         refreshIcon()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.refreshIcon() }
         autoTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.autoTick() }
+        syncManualState()
         engine.manualDischarge = { [weak self] in
             guard let self else { return false }
             return self.isRunning || self.externalRunning
@@ -99,7 +100,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         sh("sudo -n /usr/bin/pmset -a disablesleep \(on ? 1 : 0)").0 == 0
     }
 
+    /// 뷰가 읽을 수동 방전 상태를 갱신 (타이머·동작 직후에만 호출)
+    func syncManualState() {
+        let running = isRunning || externalRunning
+        let t = running ? currentDischargeTarget() : nil
+        if engine.manualRunning != running { engine.manualRunning = running }
+        if engine.manualTarget != t { engine.manualTarget = t }
+        let perm = permissionReady
+        if engine.permissionReady != perm { engine.permissionReady = perm }
+    }
+
     func autoTick() {
+        syncManualState()
         guard autoMode, permissionReady else { return }
         let plugged = adapterPlugged()
         let closed = lidClosed()
@@ -235,13 +247,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         AppActions(
             startDischarge: { [weak self] t in self?.startDischarge(target: t) },
             stopDischarge: { [weak self] in self?.stopDischarge() },
+            // 뷰 body 에서 호출되므로 외부 명령 없이 캐시된 값만 반환
             dischargeState: { [weak self] in
-                guard let self else { return (false, nil) }
-                let running = self.isRunning || self.externalRunning
-                return (running, running ? self.currentDischargeTarget() : nil)
+                guard let e = self?.engine else { return (false, nil) }
+                return (e.manualRunning, e.manualTarget)
             },
             changeDischargeTarget: { [weak self] t in self?.changeDischargeTarget(t) },
-            permissionReady: { [weak self] in self?.permissionReady ?? false },
+            permissionReady: { [weak self] in self?.engine.permissionReady ?? false },
             setupPermission: { [weak self] in self?.popover.performClose(nil); self?.setupPermission() },
             openLog: { [weak self] in self?.openLog() },
             loginEnabled: { SMAppService.mainApp.status == .enabled },
@@ -364,6 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             DispatchQueue.main.async {
                 self?.proc = nil
                 self?.target = nil
+                self?.syncManualState()
                 self?.refreshIcon()
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
                     self?.notify("방전 시작 실패 — 로그를 확인하세요")
@@ -374,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             try p.run()
             proc = p
             target = t
+            syncManualState()
             engine.tick()
             refreshIcon()
         } catch {
@@ -393,6 +407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         let t = max(20, min(100, t))
         try? "\(t)\n".write(toFile: targetFilePath, atomically: true, encoding: .utf8)
         target = t
+        syncManualState()
         refreshIcon()
     }
 
@@ -404,7 +419,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         } else {
             _ = sh("pkill -TERM -f 'clamshell-discharge [0-9]'")
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.refreshIcon() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.syncManualState(); self.refreshIcon() }
     }
 
     @objc func setupPermission() {
@@ -420,6 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
                 notify("권한 설정 실패: \(err[NSAppleScript.errorMessage] ?? "")")
             }
         } else {
+            syncManualState()
             notify(permissionReady ? "권한 설정 완료" : "권한 설정이 적용되지 않았습니다")
         }
     }

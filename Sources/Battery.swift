@@ -13,9 +13,13 @@ func sh(_ cmd: String) -> (Int32, String) {
     let pipe = Pipe()
     p.standardOutput = pipe
     p.standardError = pipe
+    // waitUntilExit() 는 런루프를 돌려서, SwiftUI 갱신 도중 타이머가 끼어들어 크래시를 일으킴.
+    // 종료 알림을 세마포어로 기다려 런루프를 돌리지 않음.
+    let done = DispatchSemaphore(value: 0)
+    p.terminationHandler = { _ in done.signal() }
     do { try p.run() } catch { return (-1, "") }
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    p.waitUntilExit()
+    done.wait()
     return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
 }
 

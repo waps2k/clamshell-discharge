@@ -121,6 +121,10 @@ final class Engine: ObservableObject {
     @Published var condition = "…"
     @Published var nextDeparture: Date?
     @Published var processes: [ProcessUsage] = []
+    /// 수동 방전 상태 (AppDelegate 타이머가 갱신; 뷰는 이 값만 읽음)
+    @Published var manualRunning = false
+    @Published var manualTarget: Int?
+    @Published var permissionReady = FileManager.default.fileExists(atPath: "/etc/sudoers.d/clamshell-discharge")
 
     /// 팝오버가 열려 있는 동안 자주 호출: 표시용 값만 갱신 (제어 로직은 tick)
     func refreshLive() {
