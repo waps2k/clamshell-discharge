@@ -69,8 +69,8 @@ struct CapacityBar: View {
                 }
                 .font(.caption2)
                 HStack {
-                    Text("배터리 성능(SOH) ") .foregroundStyle(.secondary)
-                    + Text(String(format: "%.1f%%", soh)).foregroundStyle(soh >= 80 ? Color.primary : Color.orange).fontWeight(.semibold)
+                    Text("배터리 성능(SOH) ").foregroundColor(.secondary)
+                    + Text(String(format: "%.1f%%", soh)).foregroundColor(soh >= 80 ? Color.primary : Color.orange).fontWeight(.semibold)
                     Spacer()
                     Text("열화로 \(lostPct)% (\((design - max).formatted()) mAh) 감소").foregroundStyle(.secondary)
                 }
