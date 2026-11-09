@@ -106,35 +106,52 @@ struct PopoverView: View {
     @ObservedObject var engine = Engine.shared
     @ObservedObject var settings = Settings.shared
     let actions: AppActions
+    var height: CGFloat = 640
     @State private var tick = 0 // 메뉴 상태(로그인 항목 등) 재계산용
 
     var body: some View {
         let b = engine.snapshot
         let st = engine.chargeState
-        ScrollView {
-            VStack(spacing: 12) {
-                header(b, st)
-                section("사용 기록") { usageHistory }
-                section("세부 사항") { details(b, st) }
-                section("배터리") { batteryDetails(b) }
-                section("모드") { controls }
-                section("상위 프로세스") { processes }
-                footer
+        VStack(spacing: 0) {
+            // 헤더는 고정, 나머지는 스크롤
+            header(b, st)
+                .padding(.top, 18)
+                .padding(.bottom, 10)
+                .frame(maxWidth: .infinity)
+            Divider()
+            ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 12) {
+                    Color.clear.frame(height: 0).id("top")
+                    section("사용 기록") { usageHistory }
+                    section("세부 사항") { details(b, st) }
+                    section("모드") { controls }
+                    section("배터리") { batteryDetails(b) }
+                    section("상위 프로세스") { processes }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
-            .padding(16)
+            .onAppear { proxy.scrollTo("top", anchor: .top) }
+            }
+            Divider()
+            footer
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
         }
-        .frame(width: 340, height: 720)
+        .frame(width: 340, height: height)
     }
 
     // MARK: 헤더
 
     func header(_ b: BatterySnapshot, _ st: ChargeState) -> some View {
-        VStack(spacing: 10) {
-            BatteryGlyph(percent: b.percent, state: st)
-                .padding(.top, 6)
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text("\(b.percent)").font(.system(size: 44, weight: .bold, design: .rounded))
-                Text("%").font(.title2).foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            HStack(spacing: 16) {
+                BatteryGlyph(percent: b.percent, state: st, width: 120)
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("\(b.percent)").font(.system(size: 42, weight: .bold, design: .rounded))
+                    Text("%").font(.title3).foregroundStyle(.secondary)
+                }
             }
             HStack(spacing: 6) {
                 Image(systemName: st.symbol)
@@ -253,7 +270,7 @@ struct PopoverView: View {
             }
             .frame(height: 10)
             .padding(.bottom, 4)
-            if let w = b.systemWatts { row("시스템 전력", String(format: "%.2f W", w)) }
+            if let w = b.systemWatts { row("어댑터 입력", String(format: "%.2f W", w)) }
             row("배터리 전력", String(format: "%+.2f W", b.batteryWatts))
             row("전류", "\(b.amperage) mA")
             row("전압", String(format: "%.2f V", Double(b.voltage) / 1000))
@@ -297,7 +314,13 @@ struct PopoverView: View {
                     Text("\(settings.departureTimeText) · \(settings.departureTarget)%").foregroundStyle(.secondary)
                 }
             }
-            Toggle("자동 업무 모드 (클램쉘)", isOn: $settings.autoMode)
+            Toggle(isOn: $settings.autoMode) {
+                HStack {
+                    Text("자동 업무 모드")
+                    Spacer()
+                    Text("클램쉘").foregroundStyle(.secondary)
+                }
+            }
                 .disabled(!actions.permissionReady())
 
             HStack {

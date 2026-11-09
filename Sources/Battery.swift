@@ -75,6 +75,8 @@ enum Battery {
         b.externalConnected = bool("ExternalConnected")
         b.voltage = int("Voltage") ?? 0
         b.amperage = int("InstantAmperage") ?? int("Amperage") ?? 0
+        // 어댑터 차단 직후 등 ioreg 값이 늦게 갱신될 때: 배터리 전원이면 방전 방향으로 표시
+        if !b.externalConnected && b.amperage > 0 { b.amperage = -b.amperage }
         b.nominal = int("NominalChargeCapacity") ?? 0
         if let t = SMC.readUInt16LE("B0AT"), t > 2000 { b.temperature = Double(t) / 10 - 273.15 } // 0.1 K
         else if let t = int("Temperature"), t > 0 { b.temperature = Double(t) / 100 }

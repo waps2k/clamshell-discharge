@@ -41,7 +41,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         }
         popover.behavior = .transient
         popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: PopoverView(actions: makeActions()))
         refreshIcon()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.refreshIcon() }
         autoTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.autoTick() }
@@ -50,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             return self.isRunning || self.externalRunning
         }
         engine.start()
+        if CommandLine.arguments.contains("--show-popover") { // 디버그: 실행하자마자 팝오버 열기
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.showPopover() }
+        }
         // 이전에 비정상 종료돼 잠자기 차단이 남아 있으면 복구
         if !isRunning && !externalRunning && FileManager.default.fileExists(atPath: "\(home)/.battery/clamshell-discharge.sleepdisabled") {
             _ = sh("'\(scriptPath)' --restore >> '\(logPath)' 2>&1")
@@ -196,11 +198,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         }
         if popover.isShown {
             popover.performClose(nil)
-        } else if let b = item.button {
-            engine.refreshLive()
-            popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+        } else {
+            showPopover()
         }
+    }
+
+    func showPopover() {
+        guard let b = item.button else { return }
+        engine.refreshLive()
+        // 메뉴 막대가 있는 화면 높이에 맞춰 크기 결정 (작은 화면에서 위가 잘리지 않게)
+        let screenH = b.window?.screen?.visibleFrame.height ?? 800
+        let h = max(420, min(640, screenH - 40))
+        let host = NSHostingController(rootView: PopoverView(actions: makeActions(), height: h))
+        if #available(macOS 13.0, *) { host.sizingOptions = [] }
+        host.view.frame = NSRect(x: 0, y: 0, width: 340, height: h)
+        popover.contentViewController = host
+        popover.contentSize = NSSize(width: 340, height: h)
+        // makeKey 를 하면 첫 스위치에 포커스가 가면서 스크롤이 중간으로 내려가므로 하지 않음
+        popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
     }
 
     func popoverWillShow(_ notification: Notification) {
