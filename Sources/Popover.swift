@@ -325,7 +325,31 @@ struct PopoverView: View {
                     Text("클램쉘").foregroundStyle(.secondary)
                 }
             }
-                .disabled(!actions.permissionReady())
+            .disabled(!actions.permissionReady())
+            Toggle(isOn: Binding(get: { settings.hidWake }, set: { on in
+                settings.hidWake = on
+                if on && !HIDWaker.shared.accessGranted { HIDWaker.shared.requestAccess() }
+                tick += 1
+            })) {
+                HStack {
+                    Text("블루투스 입력으로 화면 켜기")
+                    Spacer()
+                    if settings.hidWake && !HIDWaker.shared.accessGranted {
+                        Text("권한 필요").foregroundStyle(.orange)
+                    }
+                }
+            }
+            if settings.hidWake && !HIDWaker.shared.accessGranted {
+                HStack {
+                    Text("입력 모니터링 권한을 허용해야 동작합니다.").font(.caption2).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("설정 열기") {
+                        HIDWaker.shared.requestAccess()
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
+                    }
+                    .controlSize(.mini)
+                }
+            }
 
             if ds.running {
                 dischargeEditor(target: ds.target ?? 60)

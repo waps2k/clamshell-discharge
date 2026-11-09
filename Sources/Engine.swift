@@ -25,6 +25,8 @@ final class Settings: ObservableObject {
 
     /// 자동 업무 모드 (AppDelegate 와 공유)
     @Published var autoMode: Bool { didSet { d.set(autoMode, forKey: "autoMode") } }
+    /// 화면이 꺼져 있을 때 블루투스(및 모든) 키보드/마우스 입력으로 화면 켜기
+    @Published var hidWake: Bool { didSet { d.set(hidWake, forKey: "hidWake") } }
 
     let band = 3 // 세일링 폭: 목표에 닿으면 어댑터 차단, 목표-3% 까지 내려오면 다시 충전
 
@@ -32,7 +34,7 @@ final class Settings: ObservableObject {
         d.register(defaults: [
             "maintainEnabled": false, "maintainLevel": 60, "maintainOnlyClamshell": false,
             "departureEnabled": false, "departureMinutes": 18 * 60, "departureTarget": 100,
-            "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6], "autoMode": false,
+            "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6], "autoMode": false, "hidWake": true,
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -43,6 +45,7 @@ final class Settings: ObservableObject {
         departureLead = d.integer(forKey: "departureLead")
         departureWeekdays = Set((d.array(forKey: "departureWeekdays") as? [Int]) ?? [2, 3, 4, 5, 6])
         autoMode = d.bool(forKey: "autoMode")
+        hidWake = d.bool(forKey: "hidWake")
     }
 
     var departureTimeText: String { String(format: "%02d:%02d", departureMinutes / 60, departureMinutes % 60) }
@@ -158,6 +161,7 @@ final class Engine: ObservableObject {
         nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.displaysAsleep = true
+            if self.settings.hidWake { HIDWaker.shared.start() }
             // 덮개가 닫혀 있으면 바로 AC 로 돌려서 키보드/마우스로 깨울 수 있게
             if Battery.lidClosed() && Adapter.isBlocked() && !self.manualDischarge() {
                 Adapter.setBlocked(false)
@@ -166,6 +170,7 @@ final class Engine: ObservableObject {
         }
         nc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.displaysAsleep = false
+            HIDWaker.shared.stop()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.tick() }
         }
         // 설정이 바뀌면 바로 반영
@@ -173,6 +178,8 @@ final class Engine: ObservableObject {
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.tick() }
             .store(in: &bag)
+        // 블루투스 깨우기가 켜져 있으면 처음 한 번 입력 모니터링 권한 요청
+        if settings.hidWake && !HIDWaker.shared.accessGranted { HIDWaker.shared.requestAccess() }
         DispatchQueue.global().async {
             let c = Battery.condition()
             DispatchQueue.main.async { self.condition = c }
