@@ -357,7 +357,9 @@ struct PopoverView: View {
                 }
             }
             .disabled(!actions.permissionReady())
-            Toggle(tr("전원 연결 시 잠자기 안 함"), isOn: $settings.keepDisplayOnAC)
+            Toggle(isOn: $settings.keepDisplayOnAC) {
+                HStack { Text(tr("전원 연결 시 잠자기 안 함")); Spacer() }
+            }
             Toggle(isOn: Binding(get: { settings.hidWake }, set: { on in
                 settings.hidWake = on
                 if on && !HIDWaker.shared.accessGranted { HIDWaker.shared.requestAccess() }

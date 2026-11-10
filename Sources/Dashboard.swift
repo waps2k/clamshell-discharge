@@ -222,7 +222,9 @@ struct DashboardView: View {
                 })) {
                     Text(tr("충전 유지 모드")).font(.headline)
                 }
-                Text(tr("전원이 연결된 동안 배터리를 설정한 수준 근처로 유지합니다. 목표에 닿으면 어댑터를 차단해 배터리로 쓰다가, \(settings.band)% 내려오면 다시 충전합니다."))
+                Text(engine.nativeUsable
+                     ? tr("전원이 연결된 동안 배터리를 설정한 수준으로 유지합니다. macOS 충전 제한을 이 값으로 정해서, 그 수준에서는 충전도 방전도 하지 않고 전원으로만 동작합니다.")
+                     : tr("전원이 연결된 동안 배터리를 설정한 수준 근처로 유지합니다. 목표에 닿으면 어댑터를 차단해 배터리로 쓰다가, \(settings.band)% 내려오면 다시 충전합니다."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Text(tr("유지 수준"))
@@ -246,7 +248,7 @@ struct DashboardView: View {
                          : tr("관리자 권한을 한 번 허용하면 사용할 수 있습니다."))
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     if settings.useNativeLimit && !engine.nativeReady {
-                        Button(tr("권한 설정 (최초 1회)…")) { NSApp.sendAction(#selector(AppDelegate.setupNativeLimit), to: nil, from: nil) }
+                        Button(tr("권한 설정 (최초 1회)…")) { NSApp.sendAction(Selector(("setupNativeLimit")), to: nil, from: nil) }
                     }
                 }
                 HStack {
