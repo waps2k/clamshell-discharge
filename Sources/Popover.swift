@@ -264,7 +264,13 @@ struct PopoverView: View {
                 row(tr("배터리 온도"), String(format: "%.1f°C · ", c) + TempLevel(c).label,
                     tint: TempLevel(c) == .hot ? .red : TempLevel(c) == .warm ? .orange : .primary)
             }
-            row(tr("공급원"), b.plugged ? (engine.adapterBlocked ? tr("어댑터 \(b.adapterWatts)W (차단 중)") : tr("어댑터 \(b.adapterWatts)W")) : tr("배터리 전원"))
+            if b.plugged, let a = b.adapter {
+                row(tr("공급원"), a.title + (engine.adapterBlocked ? tr(" (차단 중)") : ""),
+                    tint: a.isApple ? .primary : .primary)
+                adapterStatusRow(a)
+            } else {
+                row(tr("공급원"), b.plugged ? (engine.adapterBlocked ? tr("어댑터 \(b.adapterWatts)W (차단 중)") : tr("어댑터 \(b.adapterWatts)W")) : tr("배터리 전원"))
+            }
             switch st {
             case .charging:
                 row(tr("완충까지"), b.timeToFull.map(fmtMinutes) ?? tr("계산 중"))
@@ -287,6 +293,20 @@ struct PopoverView: View {
                 row(k == .commute ? tr("다음 출근 충전") : k == .weekend ? tr("다음 주말 외출 충전") : tr("다음 퇴근 충전"),
                     "\(t.tWeekdayTime) · \(settings.schedule(k).target)%")
             }
+        }
+    }
+
+    /// 어댑터 상태 한 줄: 연결 약함 > 처음 연결 > 사용한 적 있음
+    @ViewBuilder
+    func adapterStatusRow(_ a: AdapterInfo) -> some View {
+        if a.weak {
+            row(tr("어댑터 상태"), tr("연결 약함 \(a.watts)W/\(a.maxAdvertised)W · 다시 꽂아 보세요"), tint: .orange)
+        } else if engine.adapterIsNew {
+            row(tr("어댑터 상태"), tr("처음 연결 · \(a.voltageText)"), tint: .blue)
+        } else {
+            let n = engine.adapterRecords[a.fingerprint]?.connections ?? 1
+            let prev = engine.adapterPreviousSeen.map { $0.tShortDateTime } ?? ""
+            row(tr("어댑터 상태"), prev.isEmpty ? tr("사용한 적 있음 · \(n)회") : tr("사용한 적 있음 · \(n)회 · 지난번 \(prev)"))
         }
     }
 

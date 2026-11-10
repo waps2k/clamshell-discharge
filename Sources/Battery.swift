@@ -42,6 +42,7 @@ struct BatterySnapshot {
     var timeToFull: Int?           // 분
     var systemWatts: Double?       // 시스템 전체 소비 전력 (SMC PDTR)
     var nominal = 0                // NominalChargeCapacity (mAh)
+    var adapter: AdapterInfo?      // 연결된 어댑터 정보 (정품 여부, 전압 목록)
 
     /// 배터리 입출력 전력 (W): +충전 / -방전
     var batteryWatts: Double { Double(voltage) * Double(amperage) / 1_000_000 }
@@ -97,6 +98,8 @@ enum Battery {
                 b.adapterWatts = Int(s[w].split(separator: "=").last ?? "0") ?? 0
             }
         }
+        // AdapterDetails 는 뽑은 뒤에도 남을 수 있으므로 꽂혀 있을 때만 쓴다
+        if b.adapterWatts > 0 || b.externalConnected { b.adapter = AdapterInfo.parse(out) }
         return b
     }
 

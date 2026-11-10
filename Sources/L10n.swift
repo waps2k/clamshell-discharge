@@ -31,6 +31,7 @@ func trKey(_ key: String) -> String { L10n.lookup(key) }
 /// 선택한 언어 형식으로 날짜·시각 표시
 extension Date {
     var tTime: String { formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(L10n.locale)) }
+    var tShortDateTime: String { formatted(Date.FormatStyle().month(.defaultDigits).day().hour().minute().locale(L10n.locale)) }
     var tDateTime: String { formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(L10n.locale)) }
     var tWeekdayTime: String { formatted(Date.FormatStyle().weekday(.abbreviated).hour().minute().locale(L10n.locale)) }
 }
@@ -190,6 +191,20 @@ enum L10n {
         "전원이 연결된 동안 배터리를 설정한 수준으로 유지합니다. macOS 충전 제한을 이 값으로 정해서, 그 수준에서는 충전도 방전도 하지 않고 전원으로만 동작합니다.": ["While plugged in, holds the battery at the set level. The macOS charge limit is set to this value, so at that level the Mac runs on power without charging or discharging.", "電源接続中、バッテリーを設定レベルに保ちます。macOS の充電上限をこの値にするので、そのレベルでは充電も放電もせず電源だけで動作します。", "接电源时将电池保持在设定水平。macOS 充电上限设为此值，到达后不充不放，仅用电源运行。"],
         "전원 연결됨 · 제한까지 내리는 중": ["Plugged in · easing down to limit", "電源接続 · 上限まで下げ中", "已接电源 · 正在降到上限"],
         "꽂힘 · 제한까지 내리는 중": ["Plugged · easing down to limit", "接続中 · 上限まで下げ中", "已接 · 正在降到上限"],
+        "Apple 정품 %@W": ["Apple %@W (genuine)", "Apple 純正 %@W", "Apple 原装 %@W"],
+        "호환 %@W": ["Third-party %@W", "互換 %@W", "兼容 %@W"],
+        " (차단 중)": [" (blocked)", "(遮断中)", "(已断开)"],
+        "어댑터 상태": ["Adapter", "アダプタ", "适配器"],
+        "연결 약함 %@W/%@W · 다시 꽂아 보세요": ["Weak link %@W/%@W · re-plug it", "接続が弱い %@W/%@W · 挿し直してください", "连接较弱 %@W/%@W · 请重新插拔"],
+        "처음 연결 · %@": ["First time · %@", "初めての接続 · %@", "首次连接 · %@"],
+        "사용한 적 있음 · %@회": ["Used before · %@×", "使用履歴あり · %@回", "用过 · %@ 次"],
+        "사용한 적 있음 · %@회 · 지난번 %@": ["Used before · %@× · last %@", "使用履歴あり · %@回 · 前回 %@", "用过 · %@ 次 · 上次 %@"],
+        "연결해 본 어댑터": ["Adapters used", "接続したアダプタ", "用过的适配器"],
+        "정품은 시리얼로, 호환 어댑터는 전압 목록으로 구분합니다": ["Genuine by serial, third-party by voltage list", "純正はシリアル、互換品は電圧リストで区別", "原装按序列号，兼容按电压列表区分"],
+        "아직 기록이 없습니다": ["No adapters yet", "まだ記録がありません", "暂无记录"],
+        "%@회 · 최고 %@W": ["%@× · best %@W", "%@回 · 最大 %@W", "%@ 次 · 最高 %@W"],
+        "처음 %@ · 마지막 %@": ["first %@ · last %@", "初回 %@ · 最終 %@", "首次 %@ · 最近 %@"],
+        "시리얼 %@": ["Serial %@", "シリアル %@", "序列号 %@"],
         "고온 보호": ["Heat protection", "高温保護", "高温保护"],
         "%@°C 이상 배터리 안 씀": ["No battery use at %@°C+", "%@°C以上はバッテリーを使わない", "%@°C 以上不用电池"],
         "%@°C 이상": ["%@°C or higher", "%@°C以上", "%@°C 以上"],

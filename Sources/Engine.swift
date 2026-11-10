@@ -302,6 +302,40 @@ final class Engine: ObservableObject {
     @Published var systemLimit: Int?
     /// 고온 보호 중 (배터리 온도가 기준 이상 → 배터리로 돌리지 않음, 기준-2°C 아래로 식으면 해제)
     @Published var heatHold = false
+    /// 연결해 본 어댑터 기록과 지금 연결 상태
+    @Published var adapterRecords = AdapterHistory.load()
+    @Published var adapterIsNew = false
+    @Published var adapterPreviousSeen: Date?
+    private var connectedFingerprint: String?
+    private var adapterSavedAt = Date.distantPast
+
+    func updateAdapter(_ b: BatterySnapshot) {
+        guard b.plugged, let a = b.adapter else { connectedFingerprint = nil; return }
+        let fp = a.fingerprint
+        let now = Date()
+        if fp != connectedFingerprint {
+            // 새로 꽂힘 (또는 다른 어댑터로 바뀜)
+            connectedFingerprint = fp
+            let old = adapterRecords[fp]
+            adapterIsNew = old == nil
+            adapterPreviousSeen = old?.lastSeen
+            var r = old ?? AdapterRecord(title: a.title, firstSeen: now, lastSeen: now, connections: 0, bestWatts: 0)
+            r.connections += 1
+            r.title = a.title
+            r.lastSeen = now
+            r.bestWatts = max(r.bestWatts, a.watts)
+            adapterRecords[fp] = r
+            AdapterHistory.save(adapterRecords)
+            adapterSavedAt = now
+        } else if var r = adapterRecords[fp], now.timeIntervalSince(adapterSavedAt) > 300 || a.watts > r.bestWatts {
+            r.lastSeen = now
+            r.bestWatts = max(r.bestWatts, a.watts)
+            adapterRecords[fp] = r
+            AdapterHistory.save(adapterRecords)
+            adapterSavedAt = now
+        }
+    }
+
     /// macOS 충전 제한 도우미가 설치돼 있는지
     @Published var nativeReady = NativeLimit.installed
     /// 지금 macOS 충전 제한으로 유지 중인지 (아니면 세일링)
@@ -456,6 +490,7 @@ final class Engine: ObservableObject {
     func tick() {
         guard let b = Battery.read() else { return }
         snapshot = b
+        updateAdapter(b)
         DailyLog.noteTemperature(b.temperature)
         nextDeparture = nextTime(.leave)
         nextCommute = nextTime(.commute)

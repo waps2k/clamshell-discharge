@@ -27,6 +27,7 @@ struct DashboardView: View {
                 }
                 chargeChart
                 sohChart
+                adapterList
                 maintainSettings
                 scheduleSettings(.commute)
                 scheduleSettings(.leave)
@@ -210,6 +211,48 @@ struct DashboardView: View {
             }
             .padding(4)
         }
+    }
+
+    // MARK: 어댑터 기록
+
+    var adapterList: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(tr("연결해 본 어댑터")).font(.headline)
+                    Spacer()
+                    Text(tr("정품은 시리얼로, 호환 어댑터는 전압 목록으로 구분합니다")).font(.caption).foregroundStyle(.secondary)
+                }
+                let items = engine.adapterRecords.sorted { $0.value.lastSeen > $1.value.lastSeen }
+                if items.isEmpty {
+                    Text(tr("아직 기록이 없습니다")).foregroundStyle(.secondary)
+                } else {
+                    ForEach(items, id: \.key) { key, r in
+                        HStack(alignment: .firstTextBaseline) {
+                            Image(systemName: key.hasPrefix("apple:") ? "checkmark.seal.fill" : "powerplug")
+                                .foregroundStyle(key.hasPrefix("apple:") ? .green : .secondary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(r.title).fontWeight(.medium)
+                                Text(Self.adapterDetail(key)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(tr("\(r.connections)회 · 최고 \(r.bestWatts)W")).monospacedDigit()
+                                Text(tr("처음 \(r.firstSeen.tShortDateTime) · 마지막 \(r.lastSeen.tShortDateTime)")).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(4)
+        }
+    }
+
+    /// "apple:C4H0..." → "시리얼 C4H0…", "pdo:5V3000,9V3000,…" → "5 · 9 · 15 · 20V"
+    static func adapterDetail(_ key: String) -> String {
+        if key.hasPrefix("apple:") { return tr("시리얼 \(key.dropFirst(6))") }
+        let volts = key.dropFirst(4).split(separator: ",").compactMap { $0.split(separator: "V").first }
+        return volts.joined(separator: " · ") + "V"
     }
 
     // MARK: 설정
