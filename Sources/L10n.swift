@@ -180,6 +180,7 @@ enum L10n {
         "iCloud Drive에 일별 기록 보관 (기기별 파일)": ["Keep daily log in iCloud Drive (one file per device)", "日別記録を iCloud Drive に保存(デバイスごとのファイル)", "在 iCloud 云盘保存每日记录(每台设备一个文件)"],
         "하루 한 줄 요약을 계속 쌓습니다 (10년 ≈ 수백 KB). iCloud Drive › ClamshellDischarge › %@.csv": ["One line per day, kept indefinitely (10 years ≈ a few hundred KB). iCloud Drive › ClamshellDischarge › %@.csv", "1日1行の要約を保存し続けます(10年 ≈ 数百KB)。iCloud Drive › ClamshellDischarge › %@.csv", "每天一行摘要，永久保留(10年 ≈ 几百 KB)。iCloud 云盘 › ClamshellDischarge › %@.csv"],
         "iCloud Drive가 꺼져 있어 이 Mac에만 저장합니다.": ["iCloud Drive is off, so the log is kept on this Mac only.", "iCloud Drive がオフのため、この Mac にのみ保存します。", "iCloud 云盘已关闭，仅保存在这台 Mac 上。"],
+        "macOS 충전 제한 %@% · 배터리 안 쓰고 전원 사용": ["macOS charge limit %@% · running on power, battery idle", "macOS 充電上限 %@% · バッテリーを使わず電源で動作", "macOS 充电上限 %@% · 不用电池，使用电源"],
         "배터리 온도": ["Battery temp", "バッテリー温度", "电池温度"],
         "정상": ["Normal", "正常", "正常"],
         "높음 · 열화 빨라짐": ["Warm · faster wear", "高め · 劣化が早まる", "偏高 · 老化加快"],

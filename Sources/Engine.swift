@@ -282,6 +282,8 @@ final class Engine: ObservableObject {
     @Published var displaysAsleep = false
     /// 화면이 꺼진 동안 입력이 와서 깨우는 중 (화면이 켜질 때까지 AC 유지)
     var wakeRequested = false
+    /// macOS 충전 제한 (없으면 nil)
+    @Published var systemLimit: Int?
     private var lastSampleAt = Date.distantPast
     private var lastDailyAt = Date.distantPast
     /// 영구 보관 중인 일별 기록 (90일보다 오래된 SOH 그래프용)
@@ -450,7 +452,12 @@ final class Engine: ObservableObject {
         target = want
 
         let blocked = Adapter.isBlocked()
-        if let t = want, t < 100 {
+        // 목표가 macOS 충전 제한 이상이면 macOS 가 그 수준에서 충전을 멈추고 전원으로만 동작한다
+        // (배터리를 쓰지 않음). 이때 어댑터를 끊으면 오히려 배터리를 왕복시키므로 macOS 에 맡긴다.
+        systemLimit = SMC.systemChargeLimit()
+        if let t = want, let lim = systemLimit, t >= lim {
+            if blocked { Adapter.setBlocked(false) }
+        } else if let t = want, t < 100 {
             if b.percent >= t && !blocked {
                 Adapter.setBlocked(true)        // 목표 도달 → 어댑터 차단, 배터리로 사용
             } else if b.percent <= t - settings.band && blocked {

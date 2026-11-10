@@ -169,6 +169,8 @@ struct PopoverView: View {
             .background(Capsule().fill(st.color.opacity(0.14)))
             if settings.oneShotTarget > 0, engine.mode != .oneShot, let start = engine.oneShotStartAt {
                 Text(tr("지금 충전 예약 · \(start.tTime)부터")).font(.caption).foregroundStyle(.secondary)
+            } else if let t = engine.target, let lim = engine.systemLimit, t >= lim {
+                Text(tr("macOS 충전 제한 \(lim)% · 배터리 안 쓰고 전원 사용")).font(.caption).foregroundStyle(.secondary)
             } else if let t = engine.target, [.maintain, .departure, .commute, .weekend, .oneShot].contains(engine.mode) {
                 Group {
                     switch engine.mode {

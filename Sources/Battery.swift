@@ -157,6 +157,13 @@ enum Adapter {
 
 /// SMC 값 읽기 (읽기는 권한 불필요)
 enum SMC {
+    /// macOS 충전 제한(시스템 설정 → 배터리 → 충전, macOS 26.4+). SMC CHLT 첫 바이트(예: 0x50 = 80%).
+    /// 제한이 없거나(100) 읽을 수 없으면 nil.
+    static func systemChargeLimit() -> Int? {
+        guard let b = bytes("CHLT"), let v = b.first, (50...99).contains(Int(v)) else { return nil }
+        return Int(v)
+    }
+
     static func bytes(_ key: String) -> [UInt8]? {
         let out = sh("\(smcPath) -k \(key) -r").1
         guard let r = out.range(of: "bytes ([0-9a-f ]+)\\)", options: .regularExpression) else { return nil }
