@@ -54,6 +54,8 @@ final class Settings: ObservableObject {
     @Published var keepDisplayOnAC: Bool { didSet { d.set(keepDisplayOnAC, forKey: "keepDisplayOnAC") } }
     /// 메뉴 막대에 배터리 온도 표시
     @Published var showTempInMenuBar: Bool { didSet { d.set(showTempInMenuBar, forKey: "showTempInMenuBar") } }
+    /// 일별 기록을 iCloud Drive 에도 기기별 파일로 보관
+    @Published var iCloudDailyLog: Bool { didSet { d.set(iCloudDailyLog, forKey: "iCloudDailyLog") } }
 
     let band = 3 // 세일링 폭: 목표에 닿으면 어댑터 차단, 목표-3% 까지 내려오면 다시 충전
 
@@ -64,7 +66,7 @@ final class Settings: ObservableObject {
             "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6],
             "commuteEnabled": false, "commuteMinutes": 8 * 60, "commuteTarget": 80, "commuteLead": 90,
             "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "oneShotDepartAt": 0.0,
-            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "showTempInMenuBar": true, "language": "system",
+            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "showTempInMenuBar": true, "iCloudDailyLog": true, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -91,6 +93,7 @@ final class Settings: ObservableObject {
         hidWake = d.bool(forKey: "hidWake")
         keepDisplayOnAC = d.bool(forKey: "keepDisplayOnAC")
         showTempInMenuBar = d.bool(forKey: "showTempInMenuBar")
+        iCloudDailyLog = d.bool(forKey: "iCloudDailyLog")
         language = d.string(forKey: "language") ?? "system"
     }
 
@@ -280,6 +283,9 @@ final class Engine: ObservableObject {
     /// 화면이 꺼진 동안 입력이 와서 깨우는 중 (화면이 켜질 때까지 AC 유지)
     var wakeRequested = false
     private var lastSampleAt = Date.distantPast
+    private var lastDailyAt = Date.distantPast
+    /// 영구 보관 중인 일별 기록 (90일보다 오래된 SOH 그래프용)
+    @Published var daily: [DayRecord] = DailyLog.load()
     private var bag = Set<AnyCancellable>()
 
     func start() {
@@ -406,6 +412,7 @@ final class Engine: ObservableObject {
     func tick() {
         guard let b = Battery.read() else { return }
         snapshot = b
+        DailyLog.noteTemperature(b.temperature)
         nextDeparture = nextTime(.leave)
         nextCommute = nextTime(.commute)
         nextTimes = Dictionary(uniqueKeysWithValues: ScheduleKind.allCases.compactMap { k in nextTime(k).map { (k, $0) } })
@@ -497,6 +504,12 @@ final class Engine: ObservableObject {
         if oneShotReached && !b.plugged { settings.cancelOneShot(); oneShotReached = false }
     }
 
+    func saveDaily() {
+        lastDailyAt = Date()
+        DailyLog.update(samples: samples, snapshot: snapshot, iCloud: settings.iCloudDailyLog)
+        daily = DailyLog.load()
+    }
+
     private func record(_ b: BatterySnapshot) {
         guard Date().timeIntervalSince(lastSampleAt) >= 55 else { return }
         lastSampleAt = Date()
@@ -504,6 +517,8 @@ final class Engine: ObservableObject {
                        adapterBlocked: adapterBlocked, charging: b.isCharging)
         samples.append(s)
         History.append(s)
+        // 일별 요약은 한 시간에 한 번 (앱 시작 직후 포함)
+        if Date().timeIntervalSince(lastDailyAt) >= 3600 { saveDaily() }
         let cutoff = Date().addingTimeInterval(-History.keepDays * 86400)
         if let first = samples.first, first.date < cutoff {
             samples.removeAll { $0.date < cutoff }

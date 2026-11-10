@@ -151,9 +151,16 @@ struct DashboardView: View {
     var dailySOH: [DayPoint] {
         let cal = Calendar.current
         let groups = Dictionary(grouping: engine.samples.filter { $0.soh > 0 }) { cal.startOfDay(for: $0.date) }
-        return groups.map { day, s in
-            DayPoint(day: day, soh: s.map(\.soh).reduce(0, +) / Double(s.count), cycles: s.map(\.cycles).max() ?? 0)
-        }.sorted { $0.day < $1.day }
+        var byDay = Dictionary(uniqueKeysWithValues: groups.map { day, s in
+            (day, DayPoint(day: day, soh: s.map(\.soh).reduce(0, +) / Double(s.count), cycles: s.map(\.cycles).max() ?? 0))
+        })
+        // 90일보다 오래된 날은 영구 일별 기록에서
+        for r in engine.daily where r.soh > 0 {
+            if let d = r.date, byDay[cal.startOfDay(for: d)] == nil {
+                byDay[cal.startOfDay(for: d)] = DayPoint(day: cal.startOfDay(for: d), soh: r.soh, cycles: r.cycles)
+            }
+        }
+        return byDay.values.sorted { $0.day < $1.day }
     }
 
     var sohChart: some View {
@@ -173,11 +180,15 @@ struct DashboardView: View {
                         ForEach(pts) { p in
                             LineMark(x: .value(tr("날짜"), p.day, unit: .day), y: .value("SOH", p.soh))
                                 .foregroundStyle(.purple)
-                            PointMark(x: .value(tr("날짜"), p.day, unit: .day), y: .value("SOH", p.soh))
-                                .foregroundStyle(.purple)
-                                .annotation(position: .top) {
-                                    Text(String(format: "%.1f", p.soh)).font(.caption2).foregroundStyle(.secondary)
-                                }
+                            if pts.count <= 60 {
+                                PointMark(x: .value(tr("날짜"), p.day, unit: .day), y: .value("SOH", p.soh))
+                                    .foregroundStyle(.purple)
+                                    .annotation(position: .top) {
+                                        if pts.count <= 14 {
+                                            Text(String(format: "%.1f", p.soh)).font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                    }
+                            }
                         }
                         RuleMark(y: .value(tr("기준"), 80))
                             .foregroundStyle(.red.opacity(0.6))
@@ -186,6 +197,15 @@ struct DashboardView: View {
                     .chartYScale(domain: lo...100)
                     .frame(height: 160)
                 }
+                Divider().padding(.vertical, 2)
+                Toggle(isOn: $settings.iCloudDailyLog) {
+                    Text(tr("iCloud Drive에 일별 기록 보관 (기기별 파일)"))
+                }
+                .onChange(of: settings.iCloudDailyLog) { on in if on { engine.saveDaily() } }
+                Text(DailyLog.iCloudAvailable
+                     ? tr("하루 한 줄 요약을 계속 쌓습니다 (10년 ≈ 수백 KB). iCloud Drive › ClamshellDischarge › \(DailyLog.deviceFileName).csv")
+                     : tr("iCloud Drive가 꺼져 있어 이 Mac에만 저장합니다."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(4)
         }
