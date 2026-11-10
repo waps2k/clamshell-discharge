@@ -113,7 +113,11 @@ enum Battery {
                 guard let r = chunk.range(of: "\"\(key)\"=[0-9]+", options: .regularExpression) else { return 0 }
                 return Int(chunk[r].split(separator: "=").last ?? "0") ?? 0
             }
-            if val("PortControllerActiveContractRdo") != 0 { best = max(best, val("PortControllerMaxPower") / 1000) }
+            // 예전 펌웨어는 계약(RDO)이 잡히면 0 이 아니었지만, 지금은 연결돼 있어도 RDO 가 0 으로 보일 때가 있다.
+            // 전원이 보낸 PDO 목록(NPDOs)은 꽂혀 있는 동안에만 있으므로 그것도 연결로 본다.
+            if val("PortControllerActiveContractRdo") != 0 || val("PortControllerNPDOs") > 0 {
+                best = max(best, val("PortControllerMaxPower") / 1000)
+            }
         }
         return best
     }
