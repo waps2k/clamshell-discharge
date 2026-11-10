@@ -20,6 +20,8 @@ struct AppActions {
 
 enum ChargeState {
     case charging, sailing, manualDischarge, onBattery, full, pluggedIdle
+    /// 전원은 꽂혀 있지만 macOS 충전 제한까지 배터리를 천천히 쓰는 중 (어댑터 차단 아님)
+    case easing
 
     var label: String {
         switch self {
@@ -29,6 +31,7 @@ enum ChargeState {
         case .onBattery: tr("배터리 사용 중")
         case .full: tr("충전 완료")
         case .pluggedIdle: tr("전원 연결됨 · 충전 대기")
+        case .easing: tr("전원 연결됨 · 제한까지 내리는 중")
         }
     }
     var color: Color {
@@ -38,6 +41,7 @@ enum ChargeState {
         case .manualDischarge: .orange
         case .onBattery: .secondary
         case .pluggedIdle: .teal
+        case .easing: .blue
         }
     }
     var symbol: String {
@@ -48,6 +52,7 @@ enum ChargeState {
         case .onBattery: "minus"
         case .full: "checkmark"
         case .pluggedIdle: "powerplug.fill"
+        case .easing: "arrow.down.right"
         }
     }
 }
@@ -60,6 +65,8 @@ extension Engine {
         if !b.plugged { return .onBattery }
         if b.isCharging { return .charging }
         if b.percent >= 99 { return .full }
+        // macOS 는 "충전 안 함"으로만 알려 주지만, 제한보다 높으면 배터리가 실제로 부하를 감당한다
+        if b.amperage < -150, let lim = systemLimit, b.percent > lim { return .easing }
         return .pluggedIdle
     }
 }
@@ -266,6 +273,12 @@ struct PopoverView: View {
                 }
             case .full, .pluggedIdle:
                 row(tr("충전"), tr("대기"))
+            case .easing:
+                if let lim = engine.systemLimit, b.amperage < 0 {
+                    // 남은 mAh ÷ 지금 방전 전류
+                    let mAh = Double(b.rawMax) * Double(b.percent - lim) / 100
+                    row(tr("\(lim)%까지"), fmtMinutes(max(1, Int(mAh / Double(-b.amperage) * 60))))
+                }
             default:
                 row(tr("남은 사용 시간"), b.timeToEmpty.map(fmtMinutes) ?? tr("계산 중"))
             }

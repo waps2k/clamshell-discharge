@@ -210,6 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         case .sailing: symbol = "sailboat.fill"
         case .manualDischarge: symbol = "arrow.down.circle.fill"
         case .pluggedIdle, .full: symbol = "powerplug.fill"
+        case .easing: symbol = "arrow.down.right.circle"
         case .onBattery:
             let p = snap.percent
             symbol = p > 87 ? "battery.100percent" : p > 62 ? "battery.75percent" : p > 37 ? "battery.50percent" : p > 12 ? "battery.25percent" : "battery.0percent"
@@ -220,6 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         b.imagePosition = .imageLeft
         var title = " \(snap.percent)%"
         if (isRunning || externalRunning), let t = currentDischargeTarget() { title += "→\(t)" }
+        else if st == .easing, let lim = engine.systemLimit { title += "→\(lim)" }
         else if [.departure, .commute, .weekend].contains(engine.mode) { title += "⏰" }
         else if engine.mode == .oneShot { title += "🧳" }
         if engine.heatHold && engine.target != nil { title += "🌡" }

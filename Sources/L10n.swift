@@ -188,6 +188,8 @@ enum L10n {
         "유지 수준을 macOS 충전 제한 값으로 씁니다. 현재보다 높으면 전원을 꽂은 채 제한까지 천천히 내려간 뒤, 충전도 방전도 하지 않고 전원으로만 동작합니다. 끄면 어댑터를 끊었다 붙이는 방식(세일링)을 씁니다.": ["Sets the macOS charge limit to the maintain level. If the battery is above it, it eases down while plugged in, then runs on power without charging or discharging. Turn off to use adapter cut-off (sailing) instead.", "保持レベルを macOS の充電上限に設定します。現在値が高い場合は電源接続のまま上限までゆっくり下がり、その後は充電も放電もせず電源だけで動作します。オフにするとアダプタを切り替える方式(セーリング)を使います。", "将保持水平写入 macOS 充电上限。若当前电量更高，会在接电源时缓慢降到上限，然后不充不放、仅用电源运行。关闭则改用切断适配器的方式(航行)。"],
         "관리자 권한을 한 번 허용하면 사용할 수 있습니다.": ["Available after allowing administrator access once.", "管理者権限を一度許可すると使えます。", "允许一次管理员权限后即可使用。"],
         "전원이 연결된 동안 배터리를 설정한 수준으로 유지합니다. macOS 충전 제한을 이 값으로 정해서, 그 수준에서는 충전도 방전도 하지 않고 전원으로만 동작합니다.": ["While plugged in, holds the battery at the set level. The macOS charge limit is set to this value, so at that level the Mac runs on power without charging or discharging.", "電源接続中、バッテリーを設定レベルに保ちます。macOS の充電上限をこの値にするので、そのレベルでは充電も放電もせず電源だけで動作します。", "接电源时将电池保持在设定水平。macOS 充电上限设为此值，到达后不充不放，仅用电源运行。"],
+        "전원 연결됨 · 제한까지 내리는 중": ["Plugged in · easing down to limit", "電源接続 · 上限まで下げ中", "已接电源 · 正在降到上限"],
+        "꽂힘 · 제한까지 내리는 중": ["Plugged · easing down to limit", "接続中 · 上限まで下げ中", "已接 · 正在降到上限"],
         "고온 보호": ["Heat protection", "高温保護", "高温保护"],
         "%@°C 이상 배터리 안 씀": ["No battery use at %@°C+", "%@°C以上はバッテリーを使わない", "%@°C 以上不用电池"],
         "%@°C 이상": ["%@°C or higher", "%@°C以上", "%@°C 以上"],

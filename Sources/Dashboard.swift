@@ -60,6 +60,7 @@ struct DashboardView: View {
         let b = engine.snapshot
         if !b.plugged { return tr("배터리 사용") }
         if engine.adapterBlocked { return tr("꽂힘 · 배터리 사용(세일링)") }
+        if engine.chargeState == .easing { return tr("꽂힘 · 제한까지 내리는 중") }
         if b.isCharging { return tr("충전 중 \(b.amperage)mA") }
         return tr("꽂힘 · 충전 안 함")
     }
