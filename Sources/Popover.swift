@@ -264,9 +264,10 @@ struct PopoverView: View {
                 row(tr("배터리 온도"), String(format: "%.1f°C · ", c) + TempLevel(c).label,
                     tint: TempLevel(c) == .hot ? .red : TempLevel(c) == .warm ? .orange : .primary)
             }
-            if b.plugged, let a = b.adapter {
-                row(tr("공급원"), a.title + (engine.adapterBlocked ? tr(" (차단 중)") : ""),
-                    tint: a.isApple ? .primary : .primary)
+            if b.plugged, let a = b.adapter, engine.adapterSettling {
+                row(tr("공급원"), tr("어댑터 \(a.watts)W · 확인 중…"))
+            } else if b.plugged, let a = b.adapter {
+                row(tr("공급원"), a.title + (engine.adapterBlocked ? tr(" (차단 중)") : ""))
                 adapterStatusRow(a)
             } else {
                 row(tr("공급원"), b.plugged ? (engine.adapterBlocked ? tr("어댑터 \(b.adapterWatts)W (차단 중)") : tr("어댑터 \(b.adapterWatts)W")) : tr("배터리 전원"))

@@ -284,7 +284,7 @@ final class Engine: ObservableObject {
 
     /// 팝오버가 열려 있는 동안 자주 호출: 표시용 값만 갱신 (제어 로직은 tick)
     func refreshLive() {
-        if let b = Battery.read() { snapshot = b }
+        if let b = Battery.read() { snapshot = b; updateAdapter(b) }
         adapterBlocked = Adapter.isBlocked()
     }
 
@@ -309,10 +309,29 @@ final class Engine: ObservableObject {
     private var connectedFingerprint: String?
     private var adapterSavedAt = Date.distantPast
 
+    /// 꽂은 직후엔 정품 어댑터도 이름·시리얼이 아직 안 와서 "호환"처럼 보인다.
+    /// 정품 정보가 오면 바로, 아니면 같은 값이 10초 이상 이어질 때 확정한다.
+    @Published var adapterSettling = false
+    private var pendingFingerprint: String?
+    private var pendingSince = Date.distantPast
+
     func updateAdapter(_ b: BatterySnapshot) {
-        guard b.plugged, let a = b.adapter else { connectedFingerprint = nil; return }
+        guard b.plugged, let a = b.adapter else {
+            connectedFingerprint = nil; pendingFingerprint = nil; adapterSettling = false
+            return
+        }
         let fp = a.fingerprint
         let now = Date()
+        if fp != connectedFingerprint && !a.isApple {
+            if fp != pendingFingerprint { pendingFingerprint = fp; pendingSince = now }
+            if now.timeIntervalSince(pendingSince) < 10 {
+                adapterSettling = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 11) { [weak self] in self?.refreshLive() }
+                return
+            }
+        }
+        adapterSettling = false
+        pendingFingerprint = nil
         if fp != connectedFingerprint {
             // 새로 꽂힘 (또는 다른 어댑터로 바뀜)
             connectedFingerprint = fp
