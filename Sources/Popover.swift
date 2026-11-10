@@ -9,6 +9,7 @@ struct AppActions {
     var dischargeState: () -> (running: Bool, target: Int?)
     var changeDischargeTarget: (Int) -> Void
     var permissionReady: () -> Bool
+    var setupNativeLimit: () -> Void = {}
     var setupPermission: () -> Void
     var openLog: () -> Void
     var loginEnabled: () -> Bool
@@ -172,7 +173,11 @@ struct PopoverView: View {
             } else if settings.oneShotTarget > 0, engine.mode != .oneShot, let start = engine.oneShotStartAt {
                 Text(tr("지금 충전 예약 · \(start.tTime)부터")).font(.caption).foregroundStyle(.secondary)
             } else if let t = engine.target, let lim = engine.systemLimit, t >= lim {
-                Text(tr("macOS 충전 제한 \(lim)% · 배터리 안 쓰고 전원 사용")).font(.caption).foregroundStyle(.secondary)
+                if b.plugged && b.percent > lim + 1 {
+                    Text(tr("macOS 충전 제한 \(lim)% · 제한까지 천천히 내리는 중")).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(tr("macOS 충전 제한 \(lim)% · 배터리 안 쓰고 전원 사용")).font(.caption).foregroundStyle(.secondary)
+                }
             } else if let t = engine.target, [.maintain, .departure, .commute, .weekend, .oneShot].contains(engine.mode) {
                 Group {
                     switch engine.mode {
@@ -316,6 +321,13 @@ struct PopoverView: View {
                            in: 60...100, step: 5)
                     if settings.maintainLevel != 60 {
                         Button(tr("추천 60")) { settings.maintainLevel = 60 }.controlSize(.mini)
+                    }
+                }
+                if engine.nativeSupported && settings.useNativeLimit && !engine.nativeReady {
+                    HStack {
+                        Text(tr("배터리 안 쓰고 유지하려면 권한이 필요합니다")).font(.caption2).foregroundStyle(.orange)
+                        Spacer()
+                        Button(tr("설정")) { actions.setupNativeLimit() }.controlSize(.mini)
                     }
                 }
                 // 집(덮개 열고 사용)에서도 유지할지

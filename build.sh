@@ -16,6 +16,7 @@ swiftc -O -target arm64-apple-macos13 Sources/*.swift -o "$APP/Contents/MacOS/Cl
 	-framework Cocoa -framework ServiceManagement -framework SwiftUI -framework Charts
 
 install -m 755 scripts/clamshell-discharge "$APP/Contents/Resources/clamshell-discharge"
+install -m 755 scripts/clamshell-charge-limit "$APP/Contents/Resources/clamshell-charge-limit"
 install -m 644 icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST

@@ -290,6 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             },
             changeDischargeTarget: { [weak self] t in self?.changeDischargeTarget(t) },
             permissionReady: { [weak self] in self?.engine.permissionReady ?? false },
+            setupNativeLimit: { [weak self] in self?.setupNativeLimit() },
             setupPermission: { [weak self] in self?.popover.performClose(nil); self?.setupPermission() },
             openLog: { [weak self] in self?.openLog() },
             loginEnabled: { SMAppService.mainApp.status == .enabled },
@@ -469,6 +470,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             _ = sh("pkill -TERM -f 'clamshell-discharge [0-9]'")
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.syncManualState(); self.refreshIcon() }
+    }
+
+    /// macOS 충전 제한 도우미 설치 (관리자 암호 1회): 루트 소유 스크립트 + 그 스크립트만 허용하는 sudoers
+    @objc func setupNativeLimit() {
+        guard let src = Bundle.main.path(forResource: "clamshell-charge-limit", ofType: nil) else { return }
+        let user = NSUserName()
+        let rule = "\(user) ALL = (root) NOPASSWD: \(NativeLimit.helper)"
+        let cmd = "/usr/bin/install -d -m 755 -o root -g wheel /usr/local/libexec && /usr/bin/install -m 755 -o root -g wheel '\(src)' \(NativeLimit.helper) && t=$(mktemp) && printf '%s\\\\n' '\(rule)' > $t && /usr/sbin/visudo -cf $t && /usr/bin/install -m 440 -o root -g wheel $t \(NativeLimit.sudoers); r=$?; rm -f $t; exit $r"
+        let script = "do shell script \"\(cmd)\" with prompt \"Clamshell Discharge: macOS 충전 제한을 앱이 바꿀 수 있도록 허용합니다 (60% 유지 시 배터리를 쓰지 않음).\" with administrator privileges"
+        var err: NSDictionary?
+        NSAppleScript(source: script)?.executeAndReturnError(&err)
+        if let err = err {
+            if (err[NSAppleScript.errorNumber] as? Int) != -128 {
+                notify(tr("권한 설정 실패: \(err[NSAppleScript.errorMessage] ?? "")"))
+            }
+        } else {
+            engine.nativeReady = NativeLimit.installed
+            engine.tick()
+            notify(NativeLimit.installed ? tr("권한 설정 완료") : tr("권한 설정이 적용되지 않았습니다"))
+        }
     }
 
     @objc func setupPermission() {

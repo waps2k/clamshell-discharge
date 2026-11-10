@@ -59,6 +59,10 @@ final class Settings: ObservableObject {
     /// 고온 보호: 배터리가 heatLimit °C 이상이면 배터리로 돌리지 않고(어댑터 차단 해제) 전원으로 동작
     @Published var heatProtect: Bool { didSet { d.set(heatProtect, forKey: "heatProtect") } }
     @Published var heatLimit: Int { didSet { d.set(heatLimit, forKey: "heatLimit") } }
+    /// 충전 유지를 macOS 충전 제한으로 (배터리 안 씀). 끄거나 쓸 수 없으면 어댑터 차단(세일링)
+    @Published var useNativeLimit: Bool { didSet { d.set(useNativeLimit, forKey: "useNativeLimit") } }
+    /// 앱이 목표가 없을 때 돌려놓을 macOS 충전 제한 (처음 넘겨받을 때의 값, 0 = 아직 모름)
+    @Published var nativeBaseline: Int { didSet { d.set(nativeBaseline, forKey: "nativeBaseline") } }
 
     let band = 3 // 세일링 폭: 목표에 닿으면 어댑터 차단, 목표-3% 까지 내려오면 다시 충전
 
@@ -69,7 +73,7 @@ final class Settings: ObservableObject {
             "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6],
             "commuteEnabled": false, "commuteMinutes": 8 * 60, "commuteTarget": 80, "commuteLead": 90,
             "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "oneShotDepartAt": 0.0,
-            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "showTempInMenuBar": true, "iCloudDailyLog": true, "heatProtect": true, "heatLimit": 35, "language": "system",
+            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "showTempInMenuBar": true, "iCloudDailyLog": true, "heatProtect": true, "heatLimit": 35, "useNativeLimit": true, "nativeBaseline": 0, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -99,6 +103,8 @@ final class Settings: ObservableObject {
         iCloudDailyLog = d.bool(forKey: "iCloudDailyLog")
         heatProtect = d.bool(forKey: "heatProtect")
         heatLimit = d.integer(forKey: "heatLimit")
+        useNativeLimit = d.bool(forKey: "useNativeLimit")
+        nativeBaseline = d.integer(forKey: "nativeBaseline")
         language = d.string(forKey: "language") ?? "system"
     }
 
@@ -296,6 +302,25 @@ final class Engine: ObservableObject {
     @Published var systemLimit: Int?
     /// 고온 보호 중 (배터리 온도가 기준 이상 → 배터리로 돌리지 않음, 기준-2°C 아래로 식으면 해제)
     @Published var heatHold = false
+    /// macOS 충전 제한 도우미가 설치돼 있는지
+    @Published var nativeReady = NativeLimit.installed
+    /// 지금 macOS 충전 제한으로 유지 중인지 (아니면 세일링)
+    @Published var nativeActive = false
+    private var lastNativeSet: (value: Int, at: Date)?
+    let nativeSupported = NativeLimit.supported
+
+    var nativeUsable: Bool { settings.useNativeLimit && nativeReady && nativeSupported }
+
+    /// macOS 충전 제한을 v 로 (같은 값이면 1분에 한 번만 다시 확인)
+    private func applyNative(_ v: Int) {
+        if settings.nativeBaseline == 0 {
+            let cur = NativeLimit.current()
+            settings.nativeBaseline = cur >= 80 ? cur : 80
+        }
+        if let last = lastNativeSet, last.value == v, Date().timeIntervalSince(last.at) < 60 { return }
+        if NativeLimit.current() != v || lastNativeSet?.value != v { NativeLimit.set(v) }
+        lastNativeSet = (v, Date())
+    }
     private var lastSampleAt = Date.distantPast
     private var lastDailyAt = Date.distantPast
     /// 영구 보관 중인 일별 기록 (90일보다 오래된 SOH 그래프용)
@@ -372,6 +397,11 @@ final class Engine: ObservableObject {
 
     /// 앱 종료 시: 어댑터 차단을 남기지 않음
     func shutdown() {
+        // 앱이 꺼져도 macOS 가 계속 유지하도록: 유지 중이면 유지 수준, 아니면 원래 값으로
+        if nativeUsable && lastNativeSet != nil {
+            let keep = settings.maintainEnabled && (!settings.maintainOnlyClamshell || Battery.lidClosed())
+            NativeLimit.set(keep ? settings.maintainLevel : (settings.nativeBaseline > 0 ? settings.nativeBaseline : 80))
+        }
         guard Adapter.isBlocked() && !manualDischarge() else { return }
         Adapter.setBlocked(false)
         // 어댑터가 꽂혀 있으면 macOS 가 AC 전원으로 바꿔 인식할 때까지 최대 5초 기다림
@@ -444,8 +474,9 @@ final class Engine: ObservableObject {
             return
         }
 
+        let native = nativeUsable
         var want: Int?
-        if displaysAsleep && Battery.lidClosed() && (wakeRequested || !HIDWaker.shared.accessGranted) {
+        if !native && displaysAsleep && Battery.lidClosed() && (wakeRequested || !HIDWaker.shared.accessGranted) {
             // 클램쉘 + 화면 꺼짐 + 입력 모니터링 권한 없음: AC 유지 (깨우기 보장). 화면이 켜지면 다시 유지 모드.
             mode = settings.maintainEnabled ? .maintain : .off
             want = nil
@@ -464,6 +495,22 @@ final class Engine: ObservableObject {
         target = want
 
         let blocked = Adapter.isBlocked()
+        nativeActive = native
+        if native {
+            // macOS 충전 제한으로 유지: 어댑터는 끊지 않고 목표를 제한 값으로 쓴다.
+            // 목표가 없으면(유지 꺼짐 등) 처음 넘겨받은 값(보통 80%)으로 돌려놓는다.
+            if blocked { Adapter.setBlocked(false) }
+            heatHold = false
+            applyNative(want ?? settings.nativeBaseline)
+            systemLimit = SMC.systemChargeLimit()
+            adapterBlocked = Adapter.isBlocked()
+            return
+        }
+        if lastNativeSet != nil {
+            // 방금 세일링으로 바뀜 → macOS 제한을 원래 값으로
+            NativeLimit.set(settings.nativeBaseline > 0 ? settings.nativeBaseline : 80)
+            lastNativeSet = nil
+        }
         // 목표가 macOS 충전 제한 이상이면 macOS 가 그 수준에서 충전을 멈추고 전원으로만 동작한다
         // (배터리를 쓰지 않음). 이때 어댑터를 끊으면 오히려 배터리를 왕복시키므로 macOS 에 맡긴다.
         systemLimit = SMC.systemChargeLimit()

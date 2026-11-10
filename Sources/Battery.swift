@@ -196,3 +196,32 @@ enum TempLevel {
         }
     }
 }
+
+
+/// macOS 충전 제한(PowerUIAgent 수동 충전 제한)을 앱이 직접 정한다.
+/// 제한이 현재 충전량보다 낮으면 macOS 가 전원을 꽂은 채 배터리를 제한까지 천천히 쓰고,
+/// 거기서 0 mA 로 멈춘다(충전도 방전도 안 함). SMC 충전 중지 키가 막힌 새 펌웨어에서도 동작.
+/// 루트 도우미(/usr/local/libexec/clamshell-charge-limit)를 sudoers 로 비밀번호 없이 실행한다.
+enum NativeLimit {
+    static let helper = "/usr/local/libexec/clamshell-charge-limit"
+    static let sudoers = "/etc/sudoers.d/clamshell-charge-limit"
+
+    static var installed: Bool {
+        FileManager.default.fileExists(atPath: helper) && FileManager.default.fileExists(atPath: sudoers)
+    }
+    /// 이 Mac 에 macOS 충전 제한 기능이 있는지 (SMC CHLT 키가 있으면 있음)
+    static var supported: Bool { SMC.bytes("CHLT") != nil }
+
+    /// 지금 macOS 가 적용 중인 충전 제한 (꺼져 있으면 100)
+    static func current() -> Int {
+        let out = sh("pmset -g battlimit").1
+        guard let r = out.range(of: "chargeSocLimitSoc = ([0-9]+)", options: .regularExpression) else { return 100 }
+        return Int(out[r].filter(\.isNumber)) ?? 100
+    }
+
+    @discardableResult
+    static func set(_ v: Int) -> Bool {
+        let v = max(50, min(100, v))
+        return sh("sudo -n \(helper) \(v)").0 == 0
+    }
+}

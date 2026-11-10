@@ -239,6 +239,16 @@ struct DashboardView: View {
                 .disabled(!settings.maintainEnabled)
                 Toggle(tr("덮개가 닫혀 있을 때(클램쉘)만 적용"), isOn: $settings.maintainOnlyClamshell)
                     .disabled(!settings.maintainEnabled)
+                if engine.nativeSupported {
+                    Toggle(tr("macOS 충전 제한으로 유지 (배터리 안 씀, 권장)"), isOn: $settings.useNativeLimit)
+                    Text(engine.nativeReady
+                         ? tr("유지 수준을 macOS 충전 제한 값으로 씁니다. 현재보다 높으면 전원을 꽂은 채 제한까지 천천히 내려간 뒤, 충전도 방전도 하지 않고 전원으로만 동작합니다. 끄면 어댑터를 끊었다 붙이는 방식(세일링)을 씁니다.")
+                         : tr("관리자 권한을 한 번 허용하면 사용할 수 있습니다."))
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if settings.useNativeLimit && !engine.nativeReady {
+                        Button(tr("권한 설정 (최초 1회)…")) { NSApp.sendAction(#selector(AppDelegate.setupNativeLimit), to: nil, from: nil) }
+                    }
+                }
                 HStack {
                     Toggle(tr("고온 보호"), isOn: $settings.heatProtect)
                     Spacer()

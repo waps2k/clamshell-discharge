@@ -1,0 +1,30 @@
+#!/bin/bash
+# Clamshell Discharge: set the macOS charge limit (PowerUIAgent "manual charge limit").
+#
+#   clamshell-charge-limit <50-100>
+#
+# macOS 26.4+ only offers 80-100% in System Settings, but PowerUIAgent accepts lower values
+# written to its root preferences. With a limit below the current level, macOS runs the Mac
+# from the adapter and lets the battery drift down to the limit, then holds it at 0 mA
+# (plugged in, not charging, not discharging). 100 turns the limit off.
+#
+# Installed root-owned at /usr/local/libexec/clamshell-charge-limit and allowed via sudoers
+# without a password. The argument is validated strictly; nothing else is accepted.
+set -euo pipefail
+export HOME=/var/root
+
+v="${1:-}"
+if ! [[ "$v" =~ ^[0-9]{2,3}$ ]] || [ "$v" -lt 50 ] || [ "$v" -gt 100 ]; then
+	echo "usage: clamshell-charge-limit <50-100>" >&2
+	exit 2
+fi
+
+D=com.apple.smartcharging.topoffprotection
+if [ "$v" -ge 100 ]; then
+	/usr/bin/defaults write "$D" mclLimitValue -int 100
+	/usr/bin/defaults write "$D" MCLFeatureState -int 0
+else
+	/usr/bin/defaults write "$D" mclLimitValue -int "$v"
+	/usr/bin/defaults write "$D" MCLFeatureState -int 1
+fi
+/usr/bin/notifyutil -p com.apple.smartcharging.defaultschanged
