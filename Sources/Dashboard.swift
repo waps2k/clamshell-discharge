@@ -239,6 +239,16 @@ struct DashboardView: View {
                 .disabled(!settings.maintainEnabled)
                 Toggle(tr("덮개가 닫혀 있을 때(클램쉘)만 적용"), isOn: $settings.maintainOnlyClamshell)
                     .disabled(!settings.maintainEnabled)
+                HStack {
+                    Toggle(tr("고온 보호"), isOn: $settings.heatProtect)
+                    Spacer()
+                    Stepper(value: $settings.heatLimit, in: 32...42) {
+                        Text(tr("\(settings.heatLimit)°C 이상")).monospacedDigit()
+                    }
+                    .disabled(!settings.heatProtect)
+                }
+                Text(tr("배터리가 기준 온도 이상이면 배터리로 돌리지 않고 어댑터 전원으로 동작합니다(충전은 macOS 충전 제한까지). 2°C 식으면 다시 유지 모드로 돌아갑니다."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Toggle(tr("자동 업무 모드 (전원 연결 시 덮개 닫아도 동작, 배터리면 잠자기)"), isOn: $settings.autoMode)
                 Toggle(tr("전원 연결 시 잠자기 안 함 (화면은 꺼질 수 있음)"), isOn: $settings.keepDisplayOnAC)
             }

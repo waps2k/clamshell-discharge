@@ -222,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         if (isRunning || externalRunning), let t = currentDischargeTarget() { title += "→\(t)" }
         else if [.departure, .commute, .weekend].contains(engine.mode) { title += "⏰" }
         else if engine.mode == .oneShot { title += "🧳" }
+        if engine.heatHold && engine.target != nil { title += "🌡" }
         var tip = "\(st.label)\(engine.target.map { tr(" · 목표 \($0)%") } ?? "")"
         if let c = snap.temperature {
             if settings.showTempInMenuBar { title += String(format: " %.0f°", c) + (TempLevel(c) == .hot ? "🔥" : "") }

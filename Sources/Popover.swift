@@ -167,7 +167,9 @@ struct PopoverView: View {
             .foregroundStyle(st.color)
             .padding(.horizontal, 12).padding(.vertical, 5)
             .background(Capsule().fill(st.color.opacity(0.14)))
-            if settings.oneShotTarget > 0, engine.mode != .oneShot, let start = engine.oneShotStartAt {
+            if engine.heatHold, engine.target != nil, let c = b.temperature {
+                Text(tr("고온 보호 · 배터리 \(String(format: "%.1f", c))°C · 전원으로 동작")).font(.caption).foregroundStyle(.orange)
+            } else if settings.oneShotTarget > 0, engine.mode != .oneShot, let start = engine.oneShotStartAt {
                 Text(tr("지금 충전 예약 · \(start.tTime)부터")).font(.caption).foregroundStyle(.secondary)
             } else if let t = engine.target, let lim = engine.systemLimit, t >= lim {
                 Text(tr("macOS 충전 제한 \(lim)% · 배터리 안 쓰고 전원 사용")).font(.caption).foregroundStyle(.secondary)
@@ -322,6 +324,13 @@ struct PopoverView: View {
                     chip(tr("항상"), selected: !settings.maintainOnlyClamshell) { settings.maintainOnlyClamshell = false }
                     chip(tr("덮개 닫혔을 때만"), selected: settings.maintainOnlyClamshell) { settings.maintainOnlyClamshell = true }
                     Spacer(minLength: 0)
+                }
+            }
+            Toggle(isOn: $settings.heatProtect) {
+                HStack {
+                    Text(tr("고온 보호"))
+                    Spacer()
+                    Text(tr("\(settings.heatLimit)°C 이상 배터리 안 씀")).foregroundStyle(engine.heatHold ? .orange : .secondary)
                 }
             }
             ForEach(ScheduleKind.allCases) { k in

@@ -56,6 +56,9 @@ final class Settings: ObservableObject {
     @Published var showTempInMenuBar: Bool { didSet { d.set(showTempInMenuBar, forKey: "showTempInMenuBar") } }
     /// 일별 기록을 iCloud Drive 에도 기기별 파일로 보관
     @Published var iCloudDailyLog: Bool { didSet { d.set(iCloudDailyLog, forKey: "iCloudDailyLog") } }
+    /// 고온 보호: 배터리가 heatLimit °C 이상이면 배터리로 돌리지 않고(어댑터 차단 해제) 전원으로 동작
+    @Published var heatProtect: Bool { didSet { d.set(heatProtect, forKey: "heatProtect") } }
+    @Published var heatLimit: Int { didSet { d.set(heatLimit, forKey: "heatLimit") } }
 
     let band = 3 // 세일링 폭: 목표에 닿으면 어댑터 차단, 목표-3% 까지 내려오면 다시 충전
 
@@ -66,7 +69,7 @@ final class Settings: ObservableObject {
             "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6],
             "commuteEnabled": false, "commuteMinutes": 8 * 60, "commuteTarget": 80, "commuteLead": 90,
             "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "oneShotDepartAt": 0.0,
-            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "showTempInMenuBar": true, "iCloudDailyLog": true, "language": "system",
+            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "showTempInMenuBar": true, "iCloudDailyLog": true, "heatProtect": true, "heatLimit": 35, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -94,6 +97,8 @@ final class Settings: ObservableObject {
         keepDisplayOnAC = d.bool(forKey: "keepDisplayOnAC")
         showTempInMenuBar = d.bool(forKey: "showTempInMenuBar")
         iCloudDailyLog = d.bool(forKey: "iCloudDailyLog")
+        heatProtect = d.bool(forKey: "heatProtect")
+        heatLimit = d.integer(forKey: "heatLimit")
         language = d.string(forKey: "language") ?? "system"
     }
 
@@ -189,6 +194,7 @@ struct Sample: Identifiable {
     let cycles: Int
     let adapterBlocked: Bool
     let charging: Bool
+    var temp: Double? = nil
     var id: Date { date }
 }
 
@@ -205,27 +211,31 @@ enum History {
             guard f.count >= 6, let t = Double(f[0]), let p = Int(f[1]), let s = Double(f[2]), let c = Int(f[3]) else { return nil }
             let date = Date(timeIntervalSince1970: t)
             guard date >= cutoff else { return nil }
-            return Sample(date: date, percent: p, soh: s, cycles: c, adapterBlocked: f[4] == "1", charging: f[5] == "1")
+            return Sample(date: date, percent: p, soh: s, cycles: c, adapterBlocked: f[4] == "1", charging: f[5] == "1",
+                          temp: f.count >= 7 ? Double(f[6]) : nil)
         }
     }
 
     static func append(_ s: Sample) {
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        let line = String(format: "%.0f,%d,%.2f,%d,%d,%d\n", s.date.timeIntervalSince1970, s.percent, s.soh, s.cycles, s.adapterBlocked ? 1 : 0, s.charging ? 1 : 0)
+        let row = History.line(s) + "\n"
         if let h = FileHandle(forWritingAtPath: path) {
             h.seekToEndOfFile()
-            h.write(line.data(using: .utf8)!)
+            h.write(row.data(using: .utf8)!)
             try? h.close()
         } else {
-            try? line.write(toFile: path, atomically: true, encoding: .utf8)
+            try? row.write(toFile: path, atomically: true, encoding: .utf8)
         }
+    }
+
+    static func line(_ s: Sample) -> String {
+        String(format: "%.0f,%d,%.2f,%d,%d,%d", s.date.timeIntervalSince1970, s.percent, s.soh, s.cycles, s.adapterBlocked ? 1 : 0, s.charging ? 1 : 0)
+            + (s.temp.map { String(format: ",%.1f", $0) } ?? "")
     }
 
     /// 오래된 줄을 잘라 파일을 다시 씀
     static func compact(_ samples: [Sample]) {
-        let text = samples.map {
-            String(format: "%.0f,%d,%.2f,%d,%d,%d", $0.date.timeIntervalSince1970, $0.percent, $0.soh, $0.cycles, $0.adapterBlocked ? 1 : 0, $0.charging ? 1 : 0)
-        }.joined(separator: "\n") + "\n"
+        let text = samples.map(line).joined(separator: "\n") + "\n"
         try? text.write(toFile: path, atomically: true, encoding: .utf8)
     }
 }
@@ -284,6 +294,8 @@ final class Engine: ObservableObject {
     var wakeRequested = false
     /// macOS 충전 제한 (없으면 nil)
     @Published var systemLimit: Int?
+    /// 고온 보호 중 (배터리 온도가 기준 이상 → 배터리로 돌리지 않음, 기준-2°C 아래로 식으면 해제)
+    @Published var heatHold = false
     private var lastSampleAt = Date.distantPast
     private var lastDailyAt = Date.distantPast
     /// 영구 보관 중인 일별 기록 (90일보다 오래된 SOH 그래프용)
@@ -455,7 +467,16 @@ final class Engine: ObservableObject {
         // 목표가 macOS 충전 제한 이상이면 macOS 가 그 수준에서 충전을 멈추고 전원으로만 동작한다
         // (배터리를 쓰지 않음). 이때 어댑터를 끊으면 오히려 배터리를 왕복시키므로 macOS 에 맡긴다.
         systemLimit = SMC.systemChargeLimit()
-        if let t = want, let lim = systemLimit, t >= lim {
+        if settings.heatProtect, let c = b.temperature {
+            if c >= Double(settings.heatLimit) { heatHold = true }
+            else if c <= Double(settings.heatLimit) - 2 { heatHold = false }
+        } else {
+            heatHold = false
+        }
+        if want != nil && heatHold {
+            // 고온: 배터리로 부하를 감당하면 셀이 더 뜨거워지므로 어댑터 전원으로 (충전은 macOS 제한까지)
+            if blocked { Adapter.setBlocked(false) }
+        } else if let t = want, let lim = systemLimit, t >= lim {
             if blocked { Adapter.setBlocked(false) }
         } else if let t = want, t < 100 {
             if b.percent >= t && !blocked {
@@ -521,7 +542,7 @@ final class Engine: ObservableObject {
         guard Date().timeIntervalSince(lastSampleAt) >= 55 else { return }
         lastSampleAt = Date()
         let s = Sample(date: Date(), percent: b.percent, soh: b.soh, cycles: b.cycles,
-                       adapterBlocked: adapterBlocked, charging: b.isCharging)
+                       adapterBlocked: adapterBlocked, charging: b.isCharging, temp: b.temperature)
         samples.append(s)
         History.append(s)
         // 일별 요약은 한 시간에 한 번 (앱 시작 직후 포함)
