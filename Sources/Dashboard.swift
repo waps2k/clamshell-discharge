@@ -48,6 +48,9 @@ struct DashboardView: View {
             card(tr("배터리 성능 (SOH)"), String(format: "%.1f%%", b.soh),
                  sub: "\(b.rawMax) / \(b.design) mAh", tint: sohColor(b.soh))
             card(tr("사이클"), "\(b.cycles)", sub: tr("설계 \(b.designCycles)회 기준 \(b.designCycles > 0 ? b.cycles * 100 / b.designCycles : 0)%"))
+            card(tr("배터리 온도"), b.temperature.map { String(format: "%.1f°C", $0) } ?? "-",
+                 sub: b.temperature.map { TempLevel($0).label } ?? "",
+                 tint: b.temperature.map { TempLevel($0) == .hot ? Color.red : TempLevel($0) == .warm ? .orange : .primary } ?? .primary)
             card(tr("상태"), engine.mode.label,
                  sub: engine.target.map { tr("목표 \($0)%") + (engine.adapterBlocked ? tr(" · 어댑터 차단") : "") } ?? "macOS: \(engine.condition)")
         }

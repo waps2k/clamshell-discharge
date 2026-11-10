@@ -175,3 +175,17 @@ enum SMC {
         return v.isFinite ? v : nil
     }
 }
+
+
+/// 배터리 온도 구간: 35°C 이상이면 열화가 빨라지고, 40°C 이상은 위험
+enum TempLevel {
+    case normal, warm, hot
+    init(_ c: Double) { self = c >= 40 ? .hot : (c >= 35 ? .warm : .normal) }
+    var label: String {
+        switch self {
+        case .normal: return tr("정상")
+        case .warm: return tr("높음 · 열화 빨라짐")
+        case .hot: return tr("매우 높음 · 부하를 줄이세요")
+        }
+    }
+}

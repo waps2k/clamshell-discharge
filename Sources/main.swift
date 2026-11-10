@@ -157,6 +157,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         refreshIcon()
     }
 
+    @objc func toggleTempInMenuBar() {
+        settings.showTempInMenuBar.toggle()
+        refreshIcon()
+    }
+
     @objc func toggleAutoMode() {
         autoMode.toggle()
         if autoMode {
@@ -217,8 +222,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
         if (isRunning || externalRunning), let t = currentDischargeTarget() { title += "→\(t)" }
         else if [.departure, .commute, .weekend].contains(engine.mode) { title += "⏰" }
         else if engine.mode == .oneShot { title += "🧳" }
+        var tip = "\(st.label)\(engine.target.map { tr(" · 목표 \($0)%") } ?? "")"
+        if let c = snap.temperature {
+            if settings.showTempInMenuBar { title += String(format: " %.0f°", c) + (TempLevel(c) == .hot ? "🔥" : "") }
+            tip += String(format: " · %.1f°C ", c) + TempLevel(c).label
+        }
         b.title = title
-        b.toolTip = "\(st.label)\(engine.target.map { tr(" · 목표 \($0)%") } ?? "")"
+        b.toolTip = tip
     }
 
     // MARK: 팝오버
@@ -369,6 +379,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopo
             st.isEnabled = false
             menu.addItem(st)
         }
+        let temp = NSMenuItem(title: tr("메뉴 막대에 배터리 온도 표시"), action: #selector(toggleTempInMenuBar), keyEquivalent: "")
+        temp.target = self
+        temp.state = settings.showTempInMenuBar ? .on : .off
+        menu.addItem(temp)
         menu.addItem(.separator())
 
         let stop = NSMenuItem(title: tr("방전 중지"), action: (running || ext) ? #selector(stopDischarge) : nil, keyEquivalent: "")

@@ -52,6 +52,8 @@ final class Settings: ObservableObject {
     @Published var hidWake: Bool { didSet { d.set(hidWake, forKey: "hidWake") } }
     /// 전원(어댑터) 연결 중에는 맥이 잠자기에 들어가지 않게 (세일링 중 포함, 화면은 꺼질 수 있음)
     @Published var keepDisplayOnAC: Bool { didSet { d.set(keepDisplayOnAC, forKey: "keepDisplayOnAC") } }
+    /// 메뉴 막대에 배터리 온도 표시
+    @Published var showTempInMenuBar: Bool { didSet { d.set(showTempInMenuBar, forKey: "showTempInMenuBar") } }
 
     let band = 3 // 세일링 폭: 목표에 닿으면 어댑터 차단, 목표-3% 까지 내려오면 다시 충전
 
@@ -62,7 +64,7 @@ final class Settings: ObservableObject {
             "departureLead": 90, "departureWeekdays": [2, 3, 4, 5, 6],
             "commuteEnabled": false, "commuteMinutes": 8 * 60, "commuteTarget": 80, "commuteLead": 90,
             "commuteWeekdays": [2, 3, 4, 5, 6], "oneShotTarget": 0, "oneShotSince": 0.0, "oneShotDepartAt": 0.0,
-            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "language": "system",
+            "weekendEnabled": false, "weekendMinutes": 10 * 60, "weekendTarget": 80, "weekendLead": 60, "weekendWeekdays": [7, 1], "autoMode": false, "hidWake": true, "keepDisplayOnAC": true, "showTempInMenuBar": true, "language": "system",
         ])
         maintainEnabled = d.bool(forKey: "maintainEnabled")
         maintainLevel = d.integer(forKey: "maintainLevel")
@@ -88,6 +90,7 @@ final class Settings: ObservableObject {
         autoMode = d.bool(forKey: "autoMode")
         hidWake = d.bool(forKey: "hidWake")
         keepDisplayOnAC = d.bool(forKey: "keepDisplayOnAC")
+        showTempInMenuBar = d.bool(forKey: "showTempInMenuBar")
         language = d.string(forKey: "language") ?? "system"
     }
 

@@ -244,6 +244,10 @@ struct PopoverView: View {
 
     func details(_ b: BatterySnapshot, _ st: ChargeState) -> some View {
         VStack(spacing: 6) {
+            if let c = b.temperature {
+                row(tr("배터리 온도"), String(format: "%.1f°C · ", c) + TempLevel(c).label,
+                    tint: TempLevel(c) == .hot ? .red : TempLevel(c) == .warm ? .orange : .primary)
+            }
             row(tr("공급원"), b.plugged ? (engine.adapterBlocked ? tr("어댑터 \(b.adapterWatts)W (차단 중)") : tr("어댑터 \(b.adapterWatts)W")) : tr("배터리 전원"))
             switch st {
             case .charging:
