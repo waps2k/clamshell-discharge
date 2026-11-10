@@ -59,7 +59,12 @@ final class HIDWaker {
         guard Date().timeIntervalSince(lastFire) > 2 else { return }
         lastFire = Date()
         onInput?()
-        IOPMAssertionDeclareUserActivity("Clamshell Discharge: Bluetooth input" as CFString,
+        declareActivity()
+    }
+
+    /// '사용자 활동'을 선언해 디스플레이를 켠다 (AC 로 바뀐 뒤 한 번 더 호출됨)
+    func declareActivity() {
+        IOPMAssertionDeclareUserActivity("Clamshell Discharge: keyboard/mouse input" as CFString,
                                          kIOPMUserActiveLocal, &assertion)
     }
 }

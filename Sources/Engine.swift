@@ -274,6 +274,8 @@ final class Engine: ObservableObject {
     /// 깨우지 않는다. 입력 모니터링 권한이 있으면 앱이 입력을 직접 감지하므로 차단을 유지하고
     /// (밤새 60%→80%→60% 왕복을 막음), 권한이 없을 때만 어댑터 차단을 풀어 AC 전원으로 둔다.
     @Published var displaysAsleep = false
+    /// 화면이 꺼진 동안 입력이 와서 깨우는 중 (화면이 켜질 때까지 AC 유지)
+    var wakeRequested = false
     private var lastSampleAt = Date.distantPast
     private var bag = Set<AnyCancellable>()
 
@@ -290,6 +292,7 @@ final class Engine: ObservableObject {
         }
         nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
+            wakeLog("displays slept (lid closed: \(Battery.lidClosed()), blocked: \(Adapter.isBlocked()), input access: \(HIDWaker.shared.accessGranted))")
             self.displaysAsleep = true
             if HIDWaker.shared.accessGranted {
                 // 입력을 앱이 감지 → 차단 유지 (첫 입력 때 AC 로 바꾸고 화면을 켬)
@@ -302,15 +305,31 @@ final class Engine: ObservableObject {
         }
         // 화면이 꺼진 동안 키보드/마우스 입력이 오면: 덮개 닫힘 + 차단 중이면 먼저 AC 로 전환
         // (배터리 전원 클램쉘에서는 macOS 가 화면을 켜지 않으므로), 그다음 HIDWaker 가 화면을 켬
+        // 입력 직후엔 아직 배터리로 인식돼 화면이 안 켜지므로, AC 로 바뀌는 걸 기다렸다가 한 번 더 깨운다.
+        // 화면이 켜질 때까지 tick 이 다시 차단하지 않도록 wakeRequested 로 붙잡아 둔다.
         HIDWaker.shared.onInput = { [weak self] in
             guard let self, self.displaysAsleep, !self.manualDischarge() else { return }
-            if Battery.lidClosed() && Adapter.isBlocked() {
-                Adapter.setBlocked(false)
-                self.adapterBlocked = false
+            guard Battery.lidClosed() && Adapter.isBlocked() else { return }
+            wakeLog("input while displays asleep → unblock adapter")
+            self.wakeRequested = true
+            Adapter.setBlocked(false)
+            self.adapterBlocked = false
+            DispatchQueue.global().async {
+                var ac = false
+                for _ in 0..<16 {
+                    if sh("pmset -g batt | head -1").1.contains("AC Power") { ac = true; break }
+                    Thread.sleep(forTimeInterval: 0.5)
+                }
+                DispatchQueue.main.async {
+                    wakeLog("AC \(ac ? "confirmed" : "not confirmed") → declare user activity")
+                    HIDWaker.shared.declareActivity()
+                }
             }
         }
         nc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            wakeLog("displays woke")
             self?.displaysAsleep = false
+            self?.wakeRequested = false
             HIDWaker.shared.stop()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.tick() }
         }
@@ -402,7 +421,7 @@ final class Engine: ObservableObject {
         }
 
         var want: Int?
-        if displaysAsleep && Battery.lidClosed() && !HIDWaker.shared.accessGranted {
+        if displaysAsleep && Battery.lidClosed() && (wakeRequested || !HIDWaker.shared.accessGranted) {
             // 클램쉘 + 화면 꺼짐 + 입력 모니터링 권한 없음: AC 유지 (깨우기 보장). 화면이 켜지면 다시 유지 모드.
             mode = settings.maintainEnabled ? .maintain : .off
             want = nil
@@ -488,4 +507,14 @@ final class Engine: ObservableObject {
             History.compact(samples)
         }
     }
+}
+
+
+/// 화면 깨우기 진단 기록: ~/Library/Logs/ClamshellDischarge.log
+func wakeLog(_ msg: String) {
+    let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/ClamshellDischarge.log")
+    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    let line = "\(f.string(from: Date())) \(msg)\n"
+    if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close() }
+    else { try? line.write(to: url, atomically: true, encoding: .utf8) }
 }
